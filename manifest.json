@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "LinkedIn AI SaaS",
+  "version": "1.0",
+  "description": "AI-powered LinkedIn interactions with SaaS model",
+  "permissions": [
+    "identity",
+    "activeTab",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "48": "icons/icon-48.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "content_scripts": [{
+    "matches": ["<all_urls>"],
+    "js": ["src/content/content.js"]
+  }],
+  "icons": {
+    "48": "icons/icon-48.png"
+  }
+}
