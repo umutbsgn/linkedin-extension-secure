@@ -1,28 +1,44 @@
 {
   "manifest_version": 3,
-  "name": "LinkedIn AI SaaS",
-  "version": "1.0",
-  "description": "AI-powered LinkedIn interactions with SaaS model",
+  "name": "SaaS LinkedIn AI",
+  "version": "2.0",
+  "description": "Chrome Extension for Claude AI-powered LinkedIn interactions using Anthropic API and Supabase",
   "permissions": [
-    "identity",
     "activeTab",
-    "storage"
+    "storage",
+    "unlimitedStorage"
   ],
-  "action": {
-    "default_popup": "src/popup/popup.html",
-    "default_icon": {
-      "48": "icons/icon-48.png"
-    }
-  },
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://fslbhbywcxqmqhwdcgcl.supabase.co/*",
+    "https://*.linkedin.com/*"
+  ],
   "background": {
-    "service_worker": "src/background/background.js",
+    "service_worker": "background.js",
     "type": "module"
   },
-  "content_scripts": [{
-    "matches": ["<all_urls>"],
-    "js": ["src/content/content.js"]
-  }],
+  "content_scripts": [
+    {
+      "matches": ["https://*.linkedin.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "64": "icons/icon-48.png"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.anthropic.com https://fslbhbywcxqmqhwdcgcl.supabase.co"
+  },
   "icons": {
-    "48": "icons/icon-48.png"
-  }
+    "64": "icons/icon-48.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/icon-48.png", "icons/icon-48-yellow.png", "icons/icon-48-green.png"],
+      "matches": ["https://*.linkedin.com/*"]
+    }
+  ]
 }

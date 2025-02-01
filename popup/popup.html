@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+  <title>SaaS LinkedIn AI</title>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>SaaS LinkedIn AI</h1>
+      <p class="subtitle">AI-powered LinkedIn Interaction</p>
+    </header>
+
+    <div id="authSection" class="card">
+      <div class="card-header">
+        <h2>Authentication</h2>
+        <span class="badge">Login/Register</span>
+      </div>
+      <div class="carad-content">
+        <form id="authForm" class="unauthenticated">
+          <div class="input-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" required>
+          </div>
+          <div class="input-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" required>
+          </div>
+          <div class="button-group">
+            <button type="button" id="loginButton" class="primary-button">
+              <span class="button-icon">🔐</span>
+              Login
+            </button>
+            <button type="button" id="registerButton" class="primary-button">
+              <span class="button-icon">📝</span>
+              Register
+            </button>
+          </div>
+        </form>
+        <div class="authenticated" style="display: none;">
+          <p>You are logged in.</p>
+          <button id="signOutButton" class="primary-button">
+            <span class="button-icon">🚪</span>
+            Sign Out
+          </button>
+        </div>
+        <div id="authStatus" class="status-message"></div>
+      </div>
+    </div>
+
+    <div class="card authenticated" style="display: none;">
+      <div class="card-header">
+        <h2>API Configuration</h2>
+        <span class="badge">Setup</span>
+      </div>
+      <div class="card-content">
+        <div class="input-group">
+          <label for="apiKey">Anthropic API Key</label>
+          <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
+          <div class="button-group">
+            <button id="showApiKey" class="icon-button" title="Show/Hide API Key">
+              <span class="button-icon">👁️</span>
+            </button>
+            <button id="saveApiKey" class="primary-button">
+              <span class="button-icon">💾</span>
+              Save
+            </button>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="systemPrompt">System Prompt</label>
+          <textarea id="systemPrompt" class="system-prompt" placeholder="Enter the system prompt here..."></textarea>
+          <div class="button-group">
+            <button id="resetPrompt" class="icon-button" title="Reset to Default">
+              <span class="button-icon">🔄</span>
+            </button>
+            <button id="savePrompt" class="primary-button">
+              <span class="button-icon">💾</span>
+              Save
+            </button>
+          </div>
+        </div>
+        <div id="apiKeyStatus" class="status-message"></div>
+      </div>
+    </div>
+
+    <div class="card authenticated" style="display: none;">
+      <div class="card-header">
+        <h2>Text Analysis</h2>
+        <span class="badge">Test</span>
+      </div>
+      <div class="card-content">
+        <textarea id="prompt" placeholder="Enter LinkedIn post to analyze..."></textarea>
+        <button id="submit" class="primary-button">
+          <span class="button-icon">🚀</span>
+          Analyze
+        </button>
+        <div id="response" class="response-box"></div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

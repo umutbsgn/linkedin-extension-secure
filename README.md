@@ -1,60 +1,57 @@
-# LinkedIn AI SaaS Browser Extension
+# SaasBrowserExtension
 
-This Chrome extension provides AI-powered LinkedIn interactions using Claude AI and Firebase.
+This project is a Chrome extension that integrates with the Anthropic API for AI-powered LinkedIn interactions, using Supabase for authentication and data storage.
 
-## Setup
+## Features
 
-1. Clone this repository:
-   ```
-   git clone https://github.com/your-username/SaasBrowserExtension.git
-   cd SaasBrowserExtension
-   ```
+- Analyze LinkedIn posts using AI
+- User authentication with Supabase
+- Save and manage Anthropic API key
+- Customize system prompts for AI analysis
 
-2. Install dependencies:
-   ```
-   npm install
-   cd functions
-   npm install
-   cd ..
-   ```
+## Installation
 
-3. Set up Firebase:
-   - Create a new Firebase project at https://console.firebase.google.com/
-   - Enable Authentication and Firestore in your Firebase project
-   - Add your Firebase configuration to `src/background/background.js` and `src/popup/popup.js`
+1. Clone this repository
+2. Open Chrome and navigate to `chrome://extensions`
+3. Enable "Developer mode" in the top right corner
+4. Click "Load unpacked" and select the directory containing this project
+5. The extension should now be installed and visible in your Chrome toolbar
 
-4. Set up Claude AI:
-   - Obtain an API key from Anthropic
-   - Set the Claude AI API key in Firebase Functions config:
-     ```
-     firebase functions:config:set claude.api_key="YOUR_CLAUDE_AI_API_KEY"
-     ```
+## Supabase Setup
 
-5. Deploy Firebase Functions:
-   ```
-   firebase deploy --only functions
-   ```
+Before using the extension, you need to set up your Supabase project:
 
-6. Load the extension in Chrome:
-   - Open Chrome and go to `chrome://extensions/`
-   - Enable "Developer mode"
-   - Click "Load unpacked" and select the `SaasBrowserExtension` directory
+1. Create a new Supabase project if you haven't already
+2. In your Supabase project, create a new table called `user_settings` with the following columns:
+   - `id` (uuid, primary key)
+   - `user_id` (uuid, foreign key to auth.users)
+   - `api_key` (text)
+   - `system_prompt` (text)
+3. In the Supabase SQL editor, paste and execute the contents of the `supabase/functions/create_rls_policy.sql` file. This will create a function to set up the necessary Row Level Security policy.
 
 ## Usage
 
-1. Click on the extension icon in Chrome
-2. Log in with your Google account
-3. Enter text in the input field and click "Generate AI Response"
-4. The AI-generated response will be displayed in the extension popup
+1. Click on the extension icon in the Chrome toolbar
+2. Register or log in using your Supabase credentials
+3. Enter your Anthropic API key
+4. Customize the system prompt if desired
+5. Navigate to LinkedIn and use the "Analyze with AI" button on posts
 
 ## Development
 
-To run the Firebase emulators for local development:
+To make changes to the extension:
 
-```
-firebase emulators:start
-```
+1. Modify the necessary files
+2. If you've made changes to the manifest or background scripts, you may need to reload the extension in `chrome://extensions`
+3. For changes to the popup or content scripts, you can usually just refresh the page
+
+## Troubleshooting
+
+If you encounter issues with saving user settings, ensure that:
+1. You've executed the `create_rls_policy.sql` function in your Supabase project
+2. The `user_settings` table has the correct structure
+3. You're properly authenticated in the extension
 
 ## License
 
-This project is licensed under the MIT License.
+[MIT License](LICENSE)
