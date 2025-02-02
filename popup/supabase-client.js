@@ -217,48 +217,49 @@ from(table) {
       };
     },
 
-async upsert(data) {
-  try {
-    const result = await chrome.storage.local.get('supabaseAuthToken');
-    const token = result.supabaseAuthToken;
-    if (!token) {
-      return { data: null, error: { message: 'Authentication required' } };
-    }
-
-    const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'Authorization': `Bearer ${token}`,
-        'Prefer': 'resolution=merge-duplicates'
-      },
-      body: JSON.stringify(data)
-    });
-    
-    // If the status is 204 (No Content), we can simply return an empty object.
-    let responseData = {};
-    if (response.status !== 204) {
-      responseData = await response.json();
-    }
-    
-    if (!response.ok) {
-      return { 
-        data: null, 
-        error: { 
-          message: responseData.error || responseData.message || 'Error saving data'
+    async insert(data) {
+      try {
+        const result = await chrome.storage.local.get('supabaseAuthToken');
+        const token = result.supabaseAuthToken;
+        if (!token) {
+          return { data: null, error: { message: 'Authentication required' } };
         }
-      };
-    }
-    
-    return { data: responseData, error: null };
-  } catch (error) {
-    console.error('Upsert error:', error);
-    return { 
-      data: null, 
-      error: { message: 'Network error occurred while saving data' }
-    };
-  }
-},
+
+        const response = await fetch(`${supabaseUrl}/rest/v1/${table}`, {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Authorization': `Bearer ${token}`,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          return { 
+            data: null, 
+            error: { 
+              message: errorData.message || `Insert failed with status ${response.status}`,
+              details: errorData
+            } 
+          };
+        }
+
+        const responseData = await response.json();
+        console.log("Insert response:", responseData);
+
+        return { data: responseData[0], error: null };
+      } catch (error) {
+        console.error("Error in insert method:", error);
+        return { 
+          data: null, 
+          error: { 
+            message: 'Network error during insert: ' + error.message 
+          } 
+        };
+      }
+    },
 
     update(data) {
       return {
@@ -280,23 +281,47 @@ async upsert(data) {
               method: 'PATCH',
               headers: {
                 ...headers,
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                'Prefer': 'return=representation'  // This requests the updated data
               },
               body: JSON.stringify(data)
             });
-            
-            if (response.status === 204) {
-              return { data: {}, error: null };
-            }
-            
-            const responseData = await response.json();
+
+            // More detailed error handling
             if (!response.ok) {
-              return { data: null, error: { message: responseData.error || responseData.message || 'Error updating data' } };
+              console.error("Update failed:", response.status, response.statusText);
+              const errorData = await response.json().catch(() => ({}));
+              return { 
+                data: null, 
+                error: { 
+                  message: errorData.message || `Update failed with status ${response.status}`,
+                  details: errorData
+                } 
+              };
             }
-            return { data: responseData, error: null };
+
+            // Check if data was returned
+            const responseData = response.status === 204 ? null : await response.json();
+            console.log("Update response:", responseData);
+
+            if (!responseData || !responseData.length) {
+              return { 
+                data: null, 
+                error: { 
+                  message: 'No rows were updated'
+                } 
+              };
+            }
+
+            return { data: responseData[0], error: null };
           } catch (error) {
             console.error("Error in update method:", error);
-            return { data: null, error: { message: 'Network error occurred while updating data: ' + error.message } };
+            return { 
+              data: null, 
+              error: { 
+                message: 'Network error during update: ' + error.message 
+              } 
+            };
           }
         }
       };

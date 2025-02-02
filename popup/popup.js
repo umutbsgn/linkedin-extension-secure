@@ -83,77 +83,54 @@ async function saveUserSettings(retryCount = 0) {
     
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) {
-      console.error('Session error:', sessionError);
-      throw new Error('Failed to get user session');
+      throw new Error('Failed to get user session: ' + sessionError.message);
     }
     
     if (!session || !session.user) {
-      console.error('No active session found');
       throw new Error('User not authenticated');
     }
 
-    console.log('User authenticated, saving settings...');
-    
     const settingsData = { 
       api_key: apiKey, 
       system_prompt: systemPrompt,
       updated_at: new Date().toISOString()
     };
 
-    // Try to update first
+    // Versuche zuerst ein Update
     const { data: updateData, error: updateError } = await supabase
       .from('user_settings')
       .update(settingsData)
       .eq('user_id', session.user.id);
 
-    if (updateError) {
-      console.error('Update error:', updateError);
-      
-      // If update fails because no row exists, then insert
-      if (updateError.code === 'PGRST116') {
-        console.log('No existing record found, attempting insert...');
-        const { data: insertData, error: insertError } = await supabase
-          .from('user_settings')
-          .insert({...settingsData, user_id: session.user.id});
+    console.log('Update result:', { updateData, updateError });
 
-        if (insertError) {
-          console.error('Insert error:', insertError);
-          throw insertError;
-        } else {
-          console.log('Insert successful');
-        }
-      } else if (updateError.message && updateError.message.includes('violates row-level security policy')) {
-        console.log('RLS policy violation detected, attempting to create policy...');
-        await createRLSPolicy();
-        console.log('RLS policy created, retrying update...');
-        const { error: retryError } = await supabase
-          .from('user_settings')
-          .update(settingsData)
-          .eq('user_id', session.user.id);
-        if (retryError) {
-          console.error('Retry update error:', retryError);
-          throw retryError;
-        }
-        console.log('Retry update successful');
-      } else {
-        throw updateError;
+    // Wenn keine Zeilen aktualisiert wurden, versuche einen Insert
+    if (!updateData || updateError?.message === 'No rows were updated') {
+      console.log('No rows updated, attempting insert...');
+      const { data: insertData, error: insertError } = await supabase
+        .from('user_settings')
+        .insert({
+          ...settingsData,
+          user_id: session.user.id
+        });
+
+      if (insertError) {
+        throw new Error('Failed to save settings: ' + insertError.message);
       }
-    } else {
-      console.log('Update successful');
+      console.log('Insert result:', insertData);
     }
 
-    console.log('Settings saved to Supabase, updating local storage...');
-    await chrome.storage.local.set({ anthropicApiKey: apiKey, systemPrompt });
-    console.log('Local storage updated successfully');
-    showStatus('User settings saved successfully', 'success');
+    // Update local storage
+    await chrome.storage.local.set({ 
+      anthropicApiKey: apiKey, 
+      systemPrompt 
+    });
+
+    showStatus('Settings saved successfully', 'success');
+
   } catch (error) {
-    console.error('Error saving user settings:', error);
-    if ((error.message && (error.message.includes('Network error') || error.message.includes('Failed to fetch'))) && retryCount < 3) {
-      showStatus(`Network error occurred. Retrying... (${retryCount + 1}/3)`, 'warning');
-      setTimeout(() => saveUserSettings(retryCount + 1), 2000);
-    } else {
-      showStatus(`Error saving user settings: ${error.message || JSON.stringify(error)}. Please check your internet connection and try again.`, 'error');
-    }
+    console.error('Error saving settings:', error);
+    showStatus(`Error: ${error.message}`, 'error');
   }
 }
 
