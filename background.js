@@ -15,28 +15,42 @@ async function callAnthropicAPI(prompt, systemPrompt) {
     throw new Error('API key not found. Please set your Anthropic API key in the extension options.');
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "claude-3-5-sonnet-20241022",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [
-        { role: "user", content: prompt }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+  // Additional validation of the API key
+  if (!apiKey.startsWith('sk-ant-api')) {
+    throw new Error('Invalid API key format. Please check your Anthropic API key.');
   }
 
-  return await response.json();
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [
+          { role: "user", content: prompt }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        `API call failed: ${response.status} - ${errorData.error?.message || response.statusText}`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('API Call Error:', error);
+    throw error;
+  }
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

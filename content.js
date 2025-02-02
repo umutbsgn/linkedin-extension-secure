@@ -10,11 +10,17 @@ async function analyzeLinkedInPost(postText) {
       console.log('Analysis result:', response.data.content[0].text);
       showNotification(response.data.content[0].text, 'success');
     } else {
-      throw new Error(response.error);
+      const errorMessage = response.error.includes('API key') 
+        ? 'Please check your Anthropic API key in the extension settings.'
+        : response.error;
+      throw new Error(errorMessage);
     }
   } catch (error) {
     console.error('Analysis failed:', error);
-    showNotification(`Analysis failed: ${error.message}`, 'error');
+    showNotification(
+      `Analysis failed: ${error.message}. ${error.message.includes('API key') ? '' : 'Please try again.'}`, 
+      'error'
+    );
   }
 }
 
