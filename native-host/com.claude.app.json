@@ -1,9 +1,0 @@
-{
-  "name": "com.claude.app",
-  "description": "Claude M3 Native Messaging Host",
-  "path": "/Users/umutbasilgan/BrowserExtension/native-host/claude-proxy.py",
-  "type": "stdio",
-  "allowed_origins": [
-    "chrome-extension://dodmioigmfjbkefjncbboaaocinohobk/"
-  ]
-}
