@@ -23,56 +23,69 @@ document.addEventListener('DOMContentLoaded', async () => {
   const authStatus = document.getElementById('authStatus');
   const signOutButton = document.getElementById('signOutButton');
 
-  const DEFAULT_SYSTEM_PROMPT = `You are a flexible LinkedIn communication partner. Your task is to analyze the author's style, respond accordingly, and provide casual value. Your response should be concise, maximum 120 characters, and written directly in the author's style.`;
+const DEFAULT_SYSTEM_PROMPT = `You are a flexible LinkedIn communication partner. Your task is to analyze the author's style, respond accordingly, and provide casual value. Your response should be concise, maximum 120 characters, and written directly in the author's style.`;
+const ANTHROPIC_API_KEY = 'anthropicApiKey';
 
-  // Initialize extension
-  initializeExtension();
+// Initialize extension
+initializeExtension();
 
-  // Event listeners
-  saveApiKeyButton.addEventListener('click', saveUserSettings);
-  showApiKeyButton.addEventListener('click', toggleApiKeyVisibility);
-  submitButton.addEventListener('click', analyzeText);
-  resetPromptButton.addEventListener('click', resetSystemPrompt);
-  loginButton.addEventListener('click', () => authenticate('login'));
-  registerButton.addEventListener('click', () => authenticate('register'));
-  signOutButton.addEventListener('click', signOut);
-  savePromptButton.addEventListener('click', saveUserSettings);
+// Migrate old API key if exists
+migrateOldApiKey();
 
-  // Functions
-  async function initializeExtension() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      showAuthenticatedUI();
-      await loadUserSettings();
+async function migrateOldApiKey() {
+  const result = await chrome.storage.local.get(['apiKey', ANTHROPIC_API_KEY]);
+  if (result.apiKey && !result[ANTHROPIC_API_KEY]) {
+    await chrome.storage.local.set({ [ANTHROPIC_API_KEY]: result.apiKey });
+    await chrome.storage.local.remove('apiKey');
+    console.log('Migrated old API key to new format');
+  }
+}
+
+// Event listeners
+saveApiKeyButton.addEventListener('click', saveUserSettings);
+showApiKeyButton.addEventListener('click', toggleApiKeyVisibility);
+submitButton.addEventListener('click', analyzeText);
+resetPromptButton.addEventListener('click', resetSystemPrompt);
+loginButton.addEventListener('click', () => authenticate('login'));
+registerButton.addEventListener('click', () => authenticate('register'));
+signOutButton.addEventListener('click', signOut);
+savePromptButton.addEventListener('click', saveUserSettings);
+
+// Functions
+async function initializeExtension() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    showAuthenticatedUI();
+    await loadUserSettings();
+  } else {
+    showUnauthenticatedUI();
+  }
+}
+
+async function loadUserSettings() {
+  try {
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('*')
+      .single();
+
+    if (error) throw error;
+
+    if (data) {
+      apiKeyInput.value = data.api_key || '';
+      systemPromptInput.value = data.system_prompt || DEFAULT_SYSTEM_PROMPT;
+      await chrome.storage.local.set({ 
+        [ANTHROPIC_API_KEY]: data.api_key,
+        systemPrompt: data.system_prompt
+      });
+      showStatus('User settings loaded successfully', 'success');
     } else {
-      showUnauthenticatedUI();
+      await saveUserSettings();
     }
+  } catch (error) {
+    showStatus('Error loading user settings: ' + error.message, 'error');
   }
-
-  async function loadUserSettings() {
-    try {
-      const { data, error } = await supabase
-        .from('user_settings')
-        .select('*')
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        apiKeyInput.value = data.api_key || '';
-        systemPromptInput.value = data.system_prompt || DEFAULT_SYSTEM_PROMPT;
-        await chrome.storage.local.set({ 
-          anthropicApiKey: data.api_key,
-          systemPrompt: data.system_prompt
-        });
-        showStatus('User settings loaded successfully', 'success');
-      } else {
-        await saveUserSettings();
-      }
-    } catch (error) {
-      showStatus('Error loading user settings: ' + error.message, 'error');
-    }
-  }
+}
 
 async function saveUserSettings(retryCount = 0) {
   const apiKey = apiKeyInput.value.trim();
@@ -122,7 +135,7 @@ async function saveUserSettings(retryCount = 0) {
 
     // Update local storage
     await chrome.storage.local.set({ 
-      anthropicApiKey: apiKey, 
+      [ANTHROPIC_API_KEY]: apiKey, 
       systemPrompt 
     });
 
@@ -165,7 +178,7 @@ async function createRLSPolicy() {
       submitButton.disabled = true;
       responseDiv.textContent = 'Analyzing...';
 
-      const { anthropicApiKey, systemPrompt } = await chrome.storage.local.get(['anthropicApiKey', 'systemPrompt']);
+      const { [ANTHROPIC_API_KEY]: anthropicApiKey, systemPrompt } = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'systemPrompt']);
 
       const response = await chrome.runtime.sendMessage({
         action: 'analyze',
@@ -215,6 +228,7 @@ async function createRLSPolicy() {
         showAuthStatus('Login successful', 'success');
         showAuthenticatedUI();
         await loadUserSettings();
+        await notifyAuthStatusChange('authenticated');
       } else {
         showAuthStatus('Registration successful. Please check your email to confirm your account.', 'success');
       }
@@ -223,21 +237,48 @@ async function createRLSPolicy() {
     }
   }
 
-  async function signOut() {
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+async function signOut() {
+  try {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
 
-      showAuthStatus('Logged out successfully', 'success');
-      showUnauthenticatedUI();
-      // Clear input fields
-      apiKeyInput.value = '';
-      systemPromptInput.value = '';
-      emailInput.value = '';
-      passwordInput.value = '';
-      await chrome.storage.local.remove(['anthropicApiKey', 'systemPrompt']);
+    showAuthStatus('Logged out successfully', 'success');
+    showUnauthenticatedUI();
+    // Clear input fields
+    apiKeyInput.value = '';
+    systemPromptInput.value = '';
+    emailInput.value = '';
+    passwordInput.value = '';
+    await chrome.storage.local.remove([ANTHROPIC_API_KEY, 'systemPrompt', 'supabaseAuthToken']);
+    await notifyAuthStatusChange('unauthenticated');
+  } catch (error) {
+    showAuthStatus('Logout error: ' + error.message, 'error');
+  }
+}
+
+// Function to check if user is authenticated
+async function isUserAuthenticated() {
+  try {
+    const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'supabaseAuthToken']);
+    return !!(result[ANTHROPIC_API_KEY] && result.supabaseAuthToken);
+  } catch (error) {
+    console.error('Error checking authentication status:', error);
+    return false;
+  }
+}
+
+  // Function to notify all LinkedIn tabs about auth status changes
+  async function notifyAuthStatusChange(status) {
+    try {
+      const tabs = await chrome.tabs.query({url: '*://*.linkedin.com/*'});
+      for (const tab of tabs) {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'auth_status_changed',
+          status: status
+        });
+      }
     } catch (error) {
-      showAuthStatus('Logout error: ' + error.message, 'error');
+      console.error('Error notifying tabs:', error);
     }
   }
 

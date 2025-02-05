@@ -23,7 +23,15 @@ async function analyzeLinkedInPost(postText) {
 }
 
 // Function to inject AI button to LinkedIn posts
-function injectAIButton() {
+async function injectAIButton() {
+  // Check authentication status first
+  const isAuthenticated = await isUserAuthenticated();
+  if (!isAuthenticated) {
+    // Remove existing AI buttons if user is not authenticated
+    document.querySelectorAll('.ai-comment-btn').forEach(btn => btn.remove());
+    return;
+  }
+
   const reactionBars = document.querySelectorAll('.feed-shared-social-action-bar');
   
   reactionBars.forEach(bar => {
@@ -57,17 +65,29 @@ function injectAIButton() {
 }
 
 // Initial run
-injectAIButton();
+(async () => {
+  await injectAIButton();
+})();
 
 // Set up observer for dynamic content
-const observer = new MutationObserver(() => {
-  injectAIButton();
+const observer = new MutationObserver(async () => {
+  await injectAIButton();
 });
 
 // Start observing with appropriate configuration
 observer.observe(document.body, {
   childList: true,
   subtree: true
+});
+
+// Listen for auth status changes
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'auth_status_changed') {
+    injectAIButton(); // Re-inject buttons when auth status changes
+  }
+  if (request.action === 'getSelectedText') {
+    sendResponse({ text: window.getSelection().toString() });
+  }
 });
 
 // Event handler for AI button
@@ -286,11 +306,13 @@ async function isExtensionContextValid() {
   }
 }
 
+const ANTHROPIC_API_KEY = 'anthropicApiKey';
+
 // Function to check if user is authenticated
 async function isUserAuthenticated() {
   try {
-    const result = await chrome.storage.local.get(['supabaseAuthToken']);
-    return !!result.supabaseAuthToken;
+    const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'supabaseAuthToken']);
+    return !!(result[ANTHROPIC_API_KEY] && result.supabaseAuthToken);
   } catch (error) {
     console.error('Error checking authentication status:', error);
     return false;

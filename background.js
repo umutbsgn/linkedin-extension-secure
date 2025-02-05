@@ -4,9 +4,11 @@ const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+const ANTHROPIC_API_KEY = 'anthropicApiKey';
+
 async function getApiKey() {
-  const result = await chrome.storage.local.get('anthropicApiKey');
-  return result.anthropicApiKey;
+  const result = await chrome.storage.local.get(ANTHROPIC_API_KEY);
+  return result[ANTHROPIC_API_KEY];
 }
 
 async function callAnthropicAPI(prompt, systemPrompt) {
@@ -19,6 +21,9 @@ async function callAnthropicAPI(prompt, systemPrompt) {
   if (!apiKey.startsWith('sk-ant-api')) {
     throw new Error('Invalid API key format. Please check your Anthropic API key.');
   }
+
+  // Migrate old API key if exists
+  await migrateOldApiKey();
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -72,11 +77,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Initialize Supabase session
+// Initialize Supabase session and migrate old API key
 chrome.runtime.onInstalled.addListener(() => {
   supabase.auth.getSession().then(({ data: { session } }) => {
     if (session) {
       chrome.storage.local.set({ supabaseAuthToken: session.access_token });
     }
   });
+  migrateOldApiKey();
 });
+
+async function migrateOldApiKey() {
+  const result = await chrome.storage.local.get(['apiKey', ANTHROPIC_API_KEY]);
+  if (result.apiKey && !result[ANTHROPIC_API_KEY]) {
+    await chrome.storage.local.set({ [ANTHROPIC_API_KEY]: result.apiKey });
+    await chrome.storage.local.remove('apiKey');
+    console.log('Migrated old API key to new format');
+  }
+}
