@@ -58,6 +58,9 @@ async function callAnthropicAPI(prompt, systemPrompt) {
   }
 }
 
+// Default connect system prompt for CONNECT
+const DEFAULT_CONNECT_SYSTEM_PROMPT = 'You are a LinkedIn connection request assistant. Your task is to analyze the recipient\'s profile and craft a personalized, concise connection message. Keep it friendly, professional, and highlight a shared interest or mutual benefit. Maximum 160 characters.';
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "analyze") {
     callAnthropicAPI(request.text, request.systemPrompt)
@@ -74,8 +77,71 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ token: result.supabaseAuthToken });
     });
     return true;
+  } else if (request.action === 'getCommentSystemPrompt') {
+    getCommentSystemPrompt()
+      .then(systemPromptComments => sendResponse({ systemPromptComments }))
+      .catch(error => sendResponse({ error: error.message }));
+    return true; // Indicates an asynchronous response
+  } else if (request.action === 'getConnectSystemPrompt') {
+    getConnectSystemPrompt()
+      .then(systemPromptConnect => sendResponse({ systemPromptConnect }))
+      .catch(error => {
+        console.error('Error in getConnectSystemPrompt:', error);
+        sendResponse({ systemPromptConnect: DEFAULT_CONNECT_SYSTEM_PROMPT });
+      });
+    return true; // Indicates an asynchronous response
   }
 });
+
+async function getCommentSystemPrompt() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+    const userId = session.user.id;
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('system_prompt')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) throw error;
+    return data.system_prompt;
+  } catch (error) {
+    console.error('Error fetching comment system prompt:', error);
+    throw error;
+  }
+}
+
+async function getConnectSystemPrompt() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      throw new Error('No active session');
+    }
+    const userId = session.user.id;
+    const { data, error } = await supabase
+      .from('user_settings')
+      .select('connect_system_prompt')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) throw error;
+
+    if (data && data.connect_system_prompt) {
+      console.log('Retrieved connect system prompt from Supabase:', data.connect_system_prompt);
+      return data.connect_system_prompt;
+    } else {
+      console.log('No custom connect system prompt found, using default');
+      return DEFAULT_CONNECT_SYSTEM_PROMPT;
+    }
+  } catch (error) {
+    console.error('Error fetching connect system prompt:', error);
+    console.log('Using default connect system prompt due to error');
+    return DEFAULT_CONNECT_SYSTEM_PROMPT;
+  }
+}
 
 // Initialize Supabase session and migrate old API key
 chrome.runtime.onInstalled.addListener(() => {

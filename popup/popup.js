@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const systemPromptInput = document.getElementById('systemPrompt');
   const savePromptButton = document.getElementById('savePrompt');
   const resetPromptButton = document.getElementById('resetPrompt');
+  const connectSystemPromptInput = document.getElementById('connectSystemPrompt');
+  const saveConnectPromptButton = document.getElementById('saveConnectPrompt');
+  const resetConnectPromptButton = document.getElementById('resetConnectPrompt');
   const authForm = document.getElementById('authForm');
   const emailInput = document.getElementById('email');
   const passwordInput = document.getElementById('password');
@@ -25,6 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const signOutButton = document.getElementById('signOutButton');
 
 const DEFAULT_SYSTEM_PROMPT = `You are a flexible LinkedIn communication partner. Your task is to analyze the author's style, respond accordingly, and provide casual value. Your response should be concise, maximum 120 characters, and written directly in the author's style.`;
+const DEFAULT_CONNECT_SYSTEM_PROMPT = `You are a LinkedIn connection request assistant. Your task is to analyze the recipient's profile and craft a personalized, concise connection message. Keep it friendly, professional, and highlight a shared interest or mutual benefit. Maximum 160 characters.`;
 const ANTHROPIC_API_KEY = 'anthropicApiKey';
 
 // Initialize extension
@@ -47,10 +51,17 @@ saveApiKeyButton.addEventListener('click', saveUserSettings);
 showApiKeyButton.addEventListener('click', toggleApiKeyVisibility);
 submitButton.addEventListener('click', analyzeText);
 resetPromptButton.addEventListener('click', resetSystemPrompt);
+resetConnectPromptButton.addEventListener('click', resetConnectSystemPrompt);
 loginButton.addEventListener('click', () => authenticate('login'));
 registerButton.addEventListener('click', () => authenticate('register'));
 signOutButton.addEventListener('click', signOut);
 savePromptButton.addEventListener('click', saveUserSettings);
+saveConnectPromptButton.addEventListener('click', saveUserSettings);
+
+function resetConnectSystemPrompt() {
+  connectSystemPromptInput.value = DEFAULT_CONNECT_SYSTEM_PROMPT;
+  saveUserSettings();
+}
 
 // Functions
 async function initializeExtension() {
@@ -75,9 +86,11 @@ async function loadUserSettings() {
     if (data) {
       apiKeyInput.value = data.api_key || '';
       systemPromptInput.value = data.system_prompt || DEFAULT_SYSTEM_PROMPT;
+      connectSystemPromptInput.value = data.connect_system_prompt || DEFAULT_CONNECT_SYSTEM_PROMPT;
       await chrome.storage.local.set({ 
         [ANTHROPIC_API_KEY]: data.api_key,
-        systemPrompt: data.system_prompt
+        systemPrompt: data.system_prompt,
+        connectSystemPrompt: data.connect_system_prompt
       });
       showStatus('User settings loaded successfully', 'success');
     } else {
@@ -91,6 +104,7 @@ async function loadUserSettings() {
 async function saveUserSettings(retryCount = 0) {
   const apiKey = apiKeyInput.value.trim();
   const systemPrompt = systemPromptInput.value.trim();
+  const connectSystemPrompt = connectSystemPromptInput.value.trim();
 
   try {
     console.log('Attempting to save user settings...');
@@ -107,6 +121,7 @@ async function saveUserSettings(retryCount = 0) {
     const settingsData = { 
       api_key: apiKey, 
       system_prompt: systemPrompt,
+      connect_system_prompt: connectSystemPrompt,
       updated_at: new Date().toISOString()
     };
 
@@ -137,7 +152,8 @@ async function saveUserSettings(retryCount = 0) {
     // Update local storage
     await chrome.storage.local.set({ 
       [ANTHROPIC_API_KEY]: apiKey, 
-      systemPrompt 
+      systemPrompt,
+      connectSystemPrompt
     });
 
     showStatus('Settings saved successfully', 'success');

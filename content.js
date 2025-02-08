@@ -22,56 +22,172 @@ async function analyzeLinkedInPost(postText) {
   }
 }
 
+// Function to create an AI button
+function createAIButton(className, clickHandler) {
+  const aiButton = document.createElement('button');
+  aiButton.className = `artdeco-button ${className}`;
+  aiButton.style.cssText = `
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `;
+  
+  const iconImg = document.createElement('img');
+  iconImg.src = chrome.runtime.getURL('icons/icon-48.png');
+  iconImg.style.width = '24px';
+  iconImg.style.height = '24px';
+  aiButton.appendChild(iconImg);
+  
+  aiButton.addEventListener('click', clickHandler);
+  
+  return aiButton;
+}
+
 // Function to inject AI button to LinkedIn posts
 async function injectAIButton() {
   // Check authentication status first
   const isAuthenticated = await isUserAuthenticated();
   if (!isAuthenticated) {
     // Remove existing AI buttons if user is not authenticated
-    document.querySelectorAll('.ai-comment-btn').forEach(btn => btn.remove());
+    document.querySelectorAll('.ai-post-comment-btn').forEach(btn => btn.remove());
     return;
   }
 
   const reactionBars = document.querySelectorAll('.feed-shared-social-action-bar');
   
-  reactionBars.forEach(bar => {
+  reactionBars.forEach((bar, index) => {
     // Check if AI button already exists
-    if (bar.querySelector('.ai-comment-btn')) return;
+    if (bar.querySelector('.ai-post-comment-btn')) return;
     
-    const aiButton = document.createElement('button');
-    aiButton.className = 'artdeco-button ai-comment-btn';
-    aiButton.style.cssText = `
-      background: none;
-      border: none;
-      padding: 0;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    `;
+    const aiButton = createAIButton('ai-post-comment-btn', handleAIButtonClick);
+    aiButton.dataset.postIndex = index;
     
-    const iconImg = document.createElement('img');
-    iconImg.src = chrome.runtime.getURL('icons/icon-48.png');
-    iconImg.style.width = '24px';
-    iconImg.style.height = '24px';
-    aiButton.appendChild(iconImg);
-    
-    // Click handler
-    aiButton.addEventListener('click', handleAIButtonClick);
-
     // Add button to the end of the reaction bar
     bar.appendChild(aiButton);
   });
 }
 
+// Function to check if the current page is a LinkedIn profile
+function isProfilePage() {
+  if (document.querySelector('.profile-background-image')) {
+    extractPostTexts();
+    return true;
+  }
+  return false;
+}
+
+// Function to check for the invitation note text and character limit
+function hasInvitationNote() {
+  const bodyText = document.body.innerText;
+  return bodyText.includes('Add a note to your invitation') && 
+         /\d+\/200/.test(bodyText);
+}
+
+// Function to inject AI button into connect modal
+function injectConnectAIButton() {
+  if (!hasInvitationNote()) return;
+
+  const actionBar = document.querySelector('.artdeco-modal__actionbar');
+  if (!actionBar || actionBar.querySelector('.ai-connect-btn')) return;
+
+  const aiButton = createAIButton('ai-connect-btn', handleConnectAIButtonClick);
+  actionBar.insertBefore(aiButton, actionBar.lastElementChild);
+}
+
+// Function to extract post texts
+function extractPostTexts() {
+  const aiButtons = document.querySelectorAll('.ai-post-comment-btn');
+  const postTexts = [];
+  
+  for (let i = 0; i < Math.min(2, aiButtons.length); i++) {
+    const post = aiButtons[i].closest('.feed-shared-update-v2');
+    if (post) {
+      const text = extractPostText(post);
+      if (text) {
+        postTexts.push(text);
+      }
+    }
+  }
+  
+  storePostTexts(postTexts);
+}
+
+// Function to store extracted post texts
+function storePostTexts(texts) {
+  chrome.storage.local.set({ 'extractedPostTexts': texts }, function() {
+    console.log('Post texts stored');
+  });
+}
+
+// Function to display popup with profile URL
+function showProfileUrlPopup(url) {
+  const popup = document.createElement('div');
+  popup.textContent = `Profile URL: ${url}`;
+  popup.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 10px;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    z-index: 9999;
+  `;
+  document.body.appendChild(popup);
+
+  // Remove popup after 5 seconds
+  setTimeout(() => {
+    popup.remove();
+  }, 5000);
+}
+
+// Throttle function
+function throttle(func, limit) {
+  let inThrottle;
+  return function() {
+    const args = arguments;
+    const context = this;
+    if (!inThrottle) {
+      func.apply(context, args);
+      inThrottle = true;
+      setTimeout(() => inThrottle = false, limit);
+    }
+  }
+}
+
+// Throttled profile check function
+const throttledProfileCheck = throttle(() => {
+  if (isProfilePage()) {
+    showProfileUrlPopup(window.location.href);
+  }
+}, 2000);  // Check at most once every 2 seconds
+
 // Initial run
 (async () => {
   await injectAIButton();
+  throttledProfileCheck();
 })();
 
 // Set up observer for dynamic content
-const observer = new MutationObserver(async () => {
-  await injectAIButton();
+const observer = new MutationObserver((mutations) => {
+  for (let mutation of mutations) {
+    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+      for (let node of mutation.addedNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (node.querySelector('.feed-shared-social-action-bar')) {
+            injectAIButton();
+          }
+          injectConnectAIButton();
+          // Check for profile page after significant DOM changes
+          throttledProfileCheck();
+        }
+      }
+    }
+  }
 });
 
 // Start observing with appropriate configuration
@@ -79,6 +195,11 @@ observer.observe(document.body, {
   childList: true,
   subtree: true
 });
+
+// Listen for potential navigation events
+window.addEventListener('popstate', throttledProfileCheck);
+window.addEventListener('pushstate', throttledProfileCheck);
+window.addEventListener('replacestate', throttledProfileCheck);
 
 // Listen for auth status changes
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -90,7 +211,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Event handler for AI button
+// Event handler for AI button in posts
 async function handleAIButtonClick(event) {
   const button = event.currentTarget;
   const iconImg = button.querySelector('img');
@@ -174,6 +295,171 @@ async function handleAIButtonClick(event) {
     } else {
       showNotification(`Error: ${error.message}`, 'error');
     }
+  }
+}
+
+// Event handler for AI button in connect modal
+async function handleConnectAIButtonClick(event) {
+  const button = event.currentTarget;
+  const iconImg = button.querySelector('img');
+  
+  try {
+    // Check authentication status
+    const isAuthenticated = await isUserAuthenticated();
+    if (!isAuthenticated) {
+      showNotification('Please log in to use this feature.', 'error');
+      return;
+    }
+
+    // Change icon to "generating"
+    iconImg.src = chrome.runtime.getURL('icons/icon-48-yellow.png');
+    
+    // Check if extension context is still valid
+    const isValid = await isExtensionContextValid();
+    if (!isValid) {
+      console.log('Extension context check failed');
+      showNotification('Please reload the page to use the extension.', 'error');
+      return;
+    }
+
+    // Get the connect system prompt
+    const connectSystemPrompt = await getConnectSystemPrompt();
+    console.log('Connect system prompt:', connectSystemPrompt); // Debug log
+
+    // Generate connection message
+    const message = await generateConnectionMessage(connectSystemPrompt);
+    
+    // Insert message into textarea
+    const textarea = document.querySelector('#custom-message');
+    if (textarea) {
+      textarea.value = message;
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      textarea.dispatchEvent(new Event('change', { bubbles: true }));
+      
+      // Change icon to "success"
+      iconImg.src = chrome.runtime.getURL('icons/icon-48-green.png');
+      showNotification('Connection message generated successfully', 'success');
+    } else {
+      throw new Error('Message textarea not found');
+    }
+    
+  } catch (error) {
+    console.error('Error:', error);
+    // Reset icon on error
+    iconImg.src = chrome.runtime.getURL('icons/icon-48.png');
+    
+    if (error.message.includes('API key not found')) {
+      showNotification('Please use a valid API key.', 'error');
+    } else {
+      showNotification(`Error: ${error.message}`, 'error');
+    }
+  }
+}
+
+// Function to generate connection message
+async function generateConnectionMessage(connectSystemPrompt) {
+  console.log('Generating connection message with prompt:', connectSystemPrompt);
+  const profileInfo = extractProfileInfo();
+  const { extractedPostTexts } = await chrome.storage.local.get(['extractedPostTexts']);
+  
+  // Combine profile info and post texts
+  const analysisData = {
+    ...profileInfo,
+    recentPosts: extractedPostTexts || []
+  };
+  
+  console.log('Analysis data:', JSON.stringify(analysisData));
+  const response = await analyzeProfile(analysisData, connectSystemPrompt);
+  console.log('Generated connection message:', response);
+  return response;
+}
+
+// Function to extract profile information
+function extractProfileInfo() {
+  // Extract relevant information from the profile page
+  // This is a placeholder and should be implemented based on the LinkedIn profile structure
+  const name = document.querySelector('.pv-top-card--list li:first-child')?.textContent.trim();
+  const headline = document.querySelector('.pv-top-card--list li:nth-child(2)')?.textContent.trim();
+  const about = document.querySelector('.pv-about-section .pv-about__summary-text')?.textContent.trim();
+  
+  return { name, headline, about };
+}
+
+// Function to get connect system prompt
+async function getConnectSystemPrompt() {
+  try {
+    const { connectSystemPrompt } = await chrome.storage.local.get(['connectSystemPrompt']);
+    return connectSystemPrompt || 'You are a LinkedIn connection request assistant. Your task is to analyze the recipient\'s profile and craft a personalized, concise connection message. Keep it friendly, professional, and highlight a shared interest or mutual benefit. Maximum 300 characters.';
+  } catch (error) {
+    console.error('Error fetching connect system prompt:', error);
+    showNotification('Error fetching system prompt.', 'error');
+    return 'You are a LinkedIn connection request assistant. Your task is to analyze the recipient\'s profile and craft a personalized, concise connection message. Keep it friendly, professional, and highlight a shared interest or mutual benefit. Maximum 300 characters.';
+  }
+}
+
+// Function to get comment system prompt
+async function getCommentSystemPrompt() {
+  try {
+    const response = await chrome.runtime.sendMessage({ action: 'getCommentSystemPrompt' });
+    if (response.error) {
+      console.error('Error fetching comment system prompt:', response.error);
+      return 'You are a LinkedIn comment assistant. Your task is to generate a relevant and engaging comment based on the post content. The comment should be concise, maximum 120 characters, and written in a style that matches the original post.';
+    }
+    return response.systemPromptComments;
+  } catch (error) {
+    console.error('Error fetching comment system prompt:', error);
+    return 'You are a LinkedIn comment assistant. Your task is to generate a relevant and engaging comment based on the post content. The comment should be concise, maximum 120 characters, and written in a style that matches the original post.';
+  }
+}
+
+// Function to analyze profile and generate connection message
+async function analyzeProfile(profileInfo, connectSystemPrompt) {
+  try {
+    console.log('Using connect system prompt:', connectSystemPrompt); // Debug log
+    
+    if (!connectSystemPrompt) {
+      throw new Error('Failed to retrieve connect system prompt');
+    }
+    
+    const response = await chrome.runtime.sendMessage({
+      action: 'analyze',
+      text: JSON.stringify(profileInfo),
+      systemPrompt: connectSystemPrompt
+    });
+    
+    if (response.success) {
+      console.log('Connection message generated:', response.data.content[0].text);
+      return response.data.content[0].text;
+    } else {
+      throw new Error(response.error);
+    }
+  } catch (error) {
+    console.error('Profile analysis failed:', error);
+    showNotification(`Profile analysis failed: ${error.message}`, 'error');
+    throw error;
+  }
+}
+
+// Function to analyze post and generate comment
+async function analyzePost(postText) {
+  try {
+    const systemPrompt = await getCommentSystemPrompt();
+    
+    const response = await chrome.runtime.sendMessage({
+      action: 'analyze',
+      text: postText,
+      systemPrompt: [systemPrompt] // Send as a list to fix the API error
+    });
+    
+    if (response.success) {
+      console.log('Comment generated:', response.data.content[0].text);
+      return { result: response.data.content[0].text };
+    } else {
+      throw new Error(response.error);
+    }
+  } catch (error) {
+    console.error('Post analysis failed:', error);
+    throw error;
   }
 }
 

@@ -394,6 +394,38 @@ from(table) {
         console.error('Error in checkBetaWhitelist:', error);
         return { error: { message: 'Network error occurred while checking beta whitelist', details: error.toString() } };
       }
+    },
+
+    async getConnectSystemPrompt(userId) {
+      try {
+        const result = await chrome.storage.local.get('supabaseAuthToken');
+        const token = result.supabaseAuthToken;
+        if (!token) {
+          return { error: { message: 'Authentication required' } };
+        }
+
+        const response = await fetch(`${supabaseUrl}/rest/v1/users?id=eq.${userId}&select=system_prompt_connect`, {
+          headers: {
+            ...headers,
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          return { error: { message: errorData.error || errorData.message || 'Error fetching system prompt' } };
+        }
+
+        const data = await response.json();
+        if (data.length === 0) {
+          return { error: { message: 'User not found' } };
+        }
+
+        return { data: data[0].system_prompt_connect, error: null };
+      } catch (error) {
+        console.error('Error fetching connect system prompt:', error);
+        return { error: { message: 'Network error occurred while fetching system prompt' } };
+      }
     }
   };
 };
