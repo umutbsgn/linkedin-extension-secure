@@ -26,6 +26,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const registerButton = document.getElementById('registerButton');
   const authStatus = document.getElementById('authStatus');
   const signOutButton = document.getElementById('signOutButton');
+  const postsTab = document.getElementById('postsTab');
+  const connectTab = document.getElementById('connectTab');
+  const postsContent = document.getElementById('postsContent');
+  const connectContent = document.getElementById('connectContent');
 
 const DEFAULT_SYSTEM_PROMPT = `You are a flexible LinkedIn communication partner. Your task is to analyze the author's style, respond accordingly, and provide casual value. Your response should be concise, maximum 120 characters, and written directly in the author's style.`;
 const DEFAULT_CONNECT_SYSTEM_PROMPT = `You are a LinkedIn connection request assistant. Your task is to analyze the recipient's profile and craft a personalized, concise connection message. Keep it friendly, professional, and highlight a shared interest or mutual benefit. Maximum 160 characters.`;
@@ -57,10 +61,26 @@ registerButton.addEventListener('click', () => authenticate('register'));
 signOutButton.addEventListener('click', signOut);
 savePromptButton.addEventListener('click', saveUserSettings);
 saveConnectPromptButton.addEventListener('click', saveUserSettings);
+postsTab.addEventListener('click', () => switchTab('posts'));
+connectTab.addEventListener('click', () => switchTab('connect'));
 
 function resetConnectSystemPrompt() {
   connectSystemPromptInput.value = DEFAULT_CONNECT_SYSTEM_PROMPT;
   saveUserSettings();
+}
+
+function switchTab(tab) {
+  if (tab === 'posts') {
+    postsTab.classList.add('active');
+    connectTab.classList.remove('active');
+    postsContent.classList.add('active');
+    connectContent.classList.remove('active');
+  } else {
+    postsTab.classList.remove('active');
+    connectTab.classList.add('active');
+    postsContent.classList.remove('active');
+    connectContent.classList.add('active');
+  }
 }
 
 // Functions

@@ -376,6 +376,129 @@ button:hover {
   border-top: 1px solid #eee;
 }
 
+/* Tab Styles */
+.tab-container {
+  margin-top: 16px;
+}
+
+.tab-buttons {
+  display: flex;
+  justify-content: center;
+  border-bottom: 2px solid #e1e1e1;
+}
+
+.tab-button {
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #666;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-button::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #0a66c2;
+  transform: translateX(-100%);
+  transition: transform 0.3s ease;
+}
+
+.tab-button:hover::before,
+.tab-button.active::before {
+  transform: translateX(0);
+}
+
+.tab-button:hover,
+.tab-button.active {
+  color: #0a66c2;
+}
+
+.tab-content {
+  display: none;
+  padding: 24px 0;
+  background: white;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.tab-content.active {
+  display: block;
+  opacity: 1;
+}
+
+/* Improve overall styles */
+body {
+  background: #f9f9f9;
+}
+
+.container {
+  max-width: 400px;
+  margin: 0 auto;
+  padding: 24px;
+  background: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.card {
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.primary-button {
+  transition: all 0.3s ease;
+}
+
+.primary-button:hover {
+  background-color: #004182;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.icon-button {
+  transition: all 0.3s ease;
+}
+
+.icon-button:hover {
+  background-color: #f0f0f0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.tab-button {
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover,
+.tab-button.active {
+  color: #0a66c2;
+  background-color: rgba(10, 102, 194, 0.05);
+}
+
+.tab-button::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #0a66c2;
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.tab-button:hover::before,
+.tab-button.active::before {
+  transform: scaleX(1);
+}
+
 .status-log {
   margin: 2px 0;
   padding: 4px 8px;
