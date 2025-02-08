@@ -1,4 +1,5 @@
 import { createClient } from './supabase-client.js';
+import { checkBetaAccess } from './beta-validator.js';
 
 const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
@@ -109,7 +110,7 @@ async function saveUserSettings(retryCount = 0) {
       updated_at: new Date().toISOString()
     };
 
-    // Versuche zuerst ein Update
+    // Try to update first
     const { data: updateData, error: updateError } = await supabase
       .from('user_settings')
       .update(settingsData)
@@ -117,7 +118,7 @@ async function saveUserSettings(retryCount = 0) {
 
     console.log('Update result:', { updateData, updateError });
 
-    // Wenn keine Zeilen aktualisiert wurden, versuche einen Insert
+    // If no rows were updated, try an insert
     if (!updateData || updateError?.message === 'No rows were updated') {
       console.log('No rows updated, attempting insert...');
       const { data: insertData, error: insertError } = await supabase
@@ -205,9 +206,17 @@ async function createRLSPolicy() {
     saveUserSettings();
   }
 
+  function showDebugInfo(info) {
+    const debugInfoElement = document.getElementById('debugInfo');
+    debugInfoElement.textContent = JSON.stringify(info, null, 2);
+    debugInfoElement.style.display = 'block';
+  }
+
   async function authenticate(action) {
     const email = emailInput.value.trim();
     const password = passwordInput.value;
+
+    console.log(`Attempting to ${action} with email: ${email}`);
 
     if (!email || !password) {
       showAuthStatus('Please enter both email and password', 'error');
@@ -215,12 +224,28 @@ async function createRLSPolicy() {
     }
 
     try {
+      if (action === 'register') {
+        // Perform beta access check before registration
+        console.log('Performing beta access check');
+        const betaResult = await checkBetaAccess(supabase, email);
+        console.log('Beta access check result:', betaResult);
+        if (!betaResult.allowed) {
+          showAuthStatus(betaResult.message, 'error');
+          console.error('Beta access denied:', betaResult);
+          return;
+        }
+      }
+
       let result;
       if (action === 'login') {
+        console.log('Attempting login');
         result = await supabase.auth.signInWithPassword({ email, password });
       } else {
+        console.log('Attempting registration');
         result = await supabase.auth.signUp({ email, password });
       }
+
+      console.log(`${action} result:`, result);
 
       if (result.error) throw result.error;
 
@@ -233,6 +258,7 @@ async function createRLSPolicy() {
         showAuthStatus('Registration successful. Please check your email to confirm your account.', 'success');
       }
     } catch (error) {
+      console.error(`${action} error:`, error);
       showAuthStatus(`${action === 'login' ? 'Login' : 'Registration'} error: ${error.message}`, 'error');
     }
   }

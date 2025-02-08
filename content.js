@@ -1,7 +1,7 @@
 // Function to analyze LinkedIn post
 async function analyzeLinkedInPost(postText) {
   try {
-    // Hole die Systemeinstellungen aus dem Storage
+    // Get the system settings from storage
     const { systemPrompt } = await chrome.storage.local.get(['systemPrompt']);
     
     const response = await chrome.runtime.sendMessage({
@@ -180,7 +180,7 @@ async function handleAIButtonClick(event) {
 // Function to analyze LinkedIn post
 async function analyzeLinkedInPost(postText) {
   try {
-    // Hole die Systemeinstellungen aus dem Storage
+    // Get the system settings from storage
     const { systemPrompt } = await chrome.storage.local.get(['systemPrompt']);
     
     const response = await chrome.runtime.sendMessage({

@@ -366,6 +366,34 @@ from(table) {
           }
         };
       }
+    },
+
+    async checkBetaWhitelist(email) {
+      try {
+        console.log('Checking beta whitelist for email:', email);
+        const url = `${supabaseUrl}/rest/v1/beta_whitelist?email=eq.${encodeURIComponent(email)}`;
+        console.log('Fetching from URL:', url);
+        const response = await fetch(url, {
+          headers: {
+            ...headers,
+            'apikey': supabaseKey
+          }
+        });
+
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+          const errorBody = await response.text();
+          console.error('Error response body:', errorBody);
+          return { error: { message: `Error checking beta whitelist: ${response.status} ${response.statusText}`, details: errorBody } };
+        }
+
+        const data = await response.json();
+        console.log('Beta whitelist check result:', data);
+        return { data: data.length > 0, error: null };
+      } catch (error) {
+        console.error('Error in checkBetaWhitelist:', error);
+        return { error: { message: 'Network error occurred while checking beta whitelist', details: error.toString() } };
+      }
     }
   };
 };

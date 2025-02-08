@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "SaaS LinkedIn AI",
+  "name": "Auto LinkedIn Comment AI",
   "version": "2.0",
-  "description": "Chrome Extension for Claude AI-powered LinkedIn interactions using Anthropic API and Supabase",
+  "description": "Chrome Extension for Claude AI-powered interactions using Anthropic API and Supabase",
   "permissions": [
     "activeTab",
     "storage",
@@ -22,6 +22,10 @@
     {
       "matches": ["https://*.linkedin.com/*"],
       "js": ["content.js"]
+    },
+    {
+      "matches": ["https://*.linkedin.com/*"],
+      "js": ["popup-script-injector.js"]
     }
   ],
   "action": {
@@ -38,7 +42,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/icon-48.png", "icons/icon-48-yellow.png", "icons/icon-48-green.png"],
+      "resources": ["icons/icon-48.png", "icons/icon-48-yellow.png", "icons/icon-48-green.png", "popup/beta-validator-injector.js"],
       "matches": ["https://*.linkedin.com/*"]
     }
   ]
