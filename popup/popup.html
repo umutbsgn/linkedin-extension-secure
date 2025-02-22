@@ -1,138 +1,163 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="popup.css">
-  <title>LinkedIn AI Assistant</title>
-</head>
-<body>
-  <div class="container">
-    <header>
-      <h1>LinkedIn AI Assistant</h1>
-      <p class="subtitle">Enhance your LinkedIn interactions</p>
-    </header>
 
-    <div id="authSection" class="card">
-      <div class="card-header">
-        <h2>Authentication</h2>
-        <span class="badge">Login/Register</span>
-      </div>
-      <div class="card-content">
-        <form id="authForm" class="unauthenticated">
-          <div class="input-group">
-            <label for="email">Email</label>
-            <input type="email" id="email" required>
-          </div>
-          <div class="input-group">
-            <label for="password">Password</label>
-            <input type="password" id="password" required>
-          </div>
-          <div class="button-group">
-            <button type="button" id="loginButton" class="primary-button">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="popup.css">
+    <title>LinkedIn AI Assistant</title>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>LinkedIn AI Assistant</h1>
+            <p class="subtitle">Enhance your LinkedIn interactions</p>
+        </header>
+
+        <div id="authSection" class="card">
+            <div class="card-header">
+                <h2>Authentication</h2>
+                <span class="badge">Login/Register</span>
+            </div>
+            <div class="card-content">
+                <form id="authForm" class="unauthenticated">
+                    <div class="input-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" required>
+                    </div>
+                    <div class="input-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" required>
+                    </div>
+                    <div class="button-group">
+                        <button type="button" id="loginButton" class="primary-button">
               <span class="button-icon">🔐</span>
               Login
             </button>
-            <button type="button" id="registerButton" class="primary-button">
+                        <button type="button" id="registerButton" class="primary-button">
               <span class="button-icon">📝</span>
               Register
             </button>
-          </div>
-        </form>
-        <div class="authenticated" style="display: none;">
-          <p>You are logged in.</p>
-          <button id="signOutButton" class="primary-button">
+                    </div>
+                </form>
+                <div class="authenticated" style="display: none;">
+                    <p>You are logged in.</p>
+                    <button id="signOutButton" class="primary-button">
             <span class="button-icon">🚪</span>
             Sign Out
           </button>
+                </div>
+                <div id="authStatus" class="status-message"></div>
+            </div>
         </div>
-        <div id="authStatus" class="status-message"></div>
-      </div>
-    </div>
 
-    <div class="card authenticated" style="display: none;">
-      <div class="card-header">
-        <h2>API Configuration</h2>
-        <span class="badge">Setup</span>
-      </div>
-      <div class="card-content">
-        <div class="input-group">
-          <label for="apiKey">Anthropic API Key</label>
-          <div class="api-key-input">
-            <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
-            <button id="showApiKey" class="icon-button" title="Show/Hide API Key">
+        <div class="card authenticated" style="display: none;">
+            <div class="card-header">
+                <h2>API Configuration</h2>
+                <span class="badge">Setup</span>
+            </div>
+            <div class="card-content">
+                <div class="input-group">
+                    <label for="apiKey">Anthropic API Key</label>
+                    <div class="api-key-input">
+                        <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
+                        <button id="showApiKey" class="icon-button" title="Show/Hide API Key">
               <span class="button-icon">👁️</span>
             </button>
-          </div>
-          <button id="saveApiKey" class="primary-button">
+                    </div>
+                    <button id="saveApiKey" class="primary-button">
             <span class="button-icon">💾</span>
             Save API Key
           </button>
+                </div>
+                <div id="apiKeyStatus" class="status-message"></div>
+            </div>
         </div>
-        <div id="apiKeyStatus" class="status-message"></div>
-      </div>
-    </div>
 
-    <div class="card authenticated" style="display: none;">
-      <div class="card-header">
-        <h2>System Prompts</h2>
-        <span class="badge">Configuration</span>
-      </div>
-      <div class="card-content">
-        <div class="tab-container">
-          <div class="tab-buttons">
-            <button id="postsTab" class="tab-button active">Posts</button>
-            <button id="connectTab" class="tab-button">Connect</button>
-          </div>
-          <div id="postsContent" class="tab-content active">
-            <div class="input-group">
-              <label for="systemPrompt">System Prompt for Posts</label>
-              <textarea id="systemPrompt" class="system-prompt" placeholder="Enter the system prompt for Posts here..."></textarea>
-              <div class="button-group">
-                <button id="resetPrompt" class="icon-button" title="Reset to Default">
+        <div class="card authenticated" style="display: none;">
+            <div class="card-header">
+                <h2>System Prompts</h2>
+                <span class="badge">Configuration</span>
+            </div>
+            <div class="card-content">
+                <div class="tab-container">
+                    <div class="tab-buttons">
+                        <button id="postsTab" class="tab-button active">Posts</button>
+                        <button id="connectTab" class="tab-button">Connect</button>
+                    </div>
+                    <div id="postsContent" class="tab-content active">
+                        <div class="input-group">
+                            <label for="systemPrompt">System Prompt for Posts</label>
+                            <textarea id="systemPrompt" class="system-prompt" placeholder="Enter the system prompt for Posts here..."></textarea>
+                            <div class="button-group">
+                                <button id="resetPrompt" class="icon-button" title="Reset to Default">
                   <span class="button-icon">🔄</span>
                 </button>
-                <button id="savePrompt" class="primary-button">
+                                <button id="savePrompt" class="primary-button">
                   <span class="button-icon">💾</span>
                   Save
                 </button>
-              </div>
-            </div>
-          </div>
-          <div id="connectContent" class="tab-content">
-            <div class="input-group">
-              <label for="connectSystemPrompt">System Prompt for Connect</label>
-              <textarea id="connectSystemPrompt" class="system-prompt" placeholder="Enter the system prompt for Connect here..."></textarea>
-              <div class="button-group">
-                <button id="resetConnectPrompt" class="icon-button" title="Reset to Default">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="connectContent" class="tab-content">
+                        <div class="input-group">
+                            <label for="connectSystemPrompt">System Prompt for Connect</label>
+                            <textarea id="connectSystemPrompt" class="system-prompt" placeholder="Enter the system prompt for Connect here..."></textarea>
+                            <div class="button-group">
+                                <button id="resetConnectPrompt" class="icon-button" title="Reset to Default">
                   <span class="button-icon">🔄</span>
                 </button>
-                <button id="saveConnectPrompt" class="primary-button">
+                                <button id="saveConnectPrompt" class="primary-button">
                   <span class="button-icon">💾</span>
                   Save
                 </button>
-              </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-          </div>
         </div>
-      </div>
-    </div>
 
-    <div class="card authenticated" style="display: none;">
-      <div class="card-header">
-        <h2>Test Your Prompt</h2>
-        <span class="badge">Test</span>
-      </div>
-      <div class="card-content">
-        <textarea id="prompt" placeholder="Enter LinkedIn post to analyze..."></textarea>
-        <button id="submit" class="primary-button">
+        <div class="card authenticated" style="display: none;">
+            <div class="card-header">
+                <h2>Test Your Prompt</h2>
+                <span class="badge">Test</span>
+            </div>
+            <div class="card-content">
+                <textarea id="prompt" placeholder="Enter LinkedIn post to analyze..."></textarea>
+                <button id="submit" class="primary-button">
           <span class="button-icon">🚀</span>
           Analyze
         </button>
-        <div id="response" class="response-box"></div>
-      </div>
+                <div id="response" class="response-box"></div>
+            </div>
+        </div>
     </div>
-  </div>
-  <script type="module" src="popup.js"></script>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>PostHog Test</h2>
+            <span class="badge">Analytics</span>
+        </div>
+        <div class="card-content">
+            <button id="testPostHogEvent" class="primary-button">
+        <span class="button-icon">📊</span>
+        Test PostHog Event
+      </button>
+        </div>
+    </div>
+
+    <script src="../lib/posthog/posthog.js"></script>
+    <script type="module" src="analytics.js"></script>
+    <script type="module" src="popup.js"></script>
+    <script>
+        // Initialize PostHog
+        window.posthog = window.posthog || function() {
+            (window.posthog.q = window.posthog.q || []).push(arguments)
+        };
+    </script>
 </body>
+
 </html>

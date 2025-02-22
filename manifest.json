@@ -1,49 +1,53 @@
 {
-  "manifest_version": 3,
-  "name": "Auto LinkedIn Comment AI",
-  "version": "2.0",
-  "description": "Chrome Extension for Claude AI-powered interactions using Anthropic API and Supabase",
-  "permissions": [
-    "activeTab",
-    "storage",
-    "unlimitedStorage",
-    "tabs"
-  ],
-  "host_permissions": [
-    "https://api.anthropic.com/*",
-    "https://fslbhbywcxqmqhwdcgcl.supabase.co/*",
-    "https://*.linkedin.com/*"
-  ],
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  },
-  "content_scripts": [
-    {
-      "matches": ["https://*.linkedin.com/*"],
-      "js": ["content.js"]
+    "manifest_version": 3,
+    "name": "Auto LinkedIn Comment AI",
+    "version": "2.0",
+    "description": "Chrome Extension for Claude AI-powered interactions using Anthropic API and Supabase",
+    "permissions": [
+        "activeTab",
+        "storage",
+        "unlimitedStorage",
+        "tabs"
+    ],
+    "host_permissions": [
+        "https://api.anthropic.com/*",
+        "https://fslbhbywcxqmqhwdcgcl.supabase.co/*",
+        "https://*.linkedin.com/*",
+        "https://eu.i.posthog.com/*"
+    ],
+    "background": {
+        "service_worker": "background.js",
+        "type": "module"
     },
-    {
-      "matches": ["https://*.linkedin.com/*"],
-      "js": ["popup-script-injector.js"]
+    "content_scripts": [{
+            "matches": ["https://*.linkedin.com/*"],
+            "js": ["content.js"]
+        },
+        {
+            "matches": ["https://*.linkedin.com/*"],
+            "js": ["popup-script-injector.js"]
+        }
+    ],
+    "action": {
+        "default_popup": "popup/popup.html",
+        "default_icon": {
+            "64": "icons/icon-48.png"
+        }
+    },
+    "content_security_policy": {
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.anthropic.com https://fslbhbywcxqmqhwdcgcl.supabase.co https://eu.i.posthog.com"
+    },
+    "web_accessible_resources": [{
+        "resources": [
+            "icons/icon-48.png",
+            "icons/icon-48-yellow.png",
+            "icons/icon-48-green.png",
+            "popup/beta-validator-injector.js",
+            "lib/posthog/posthog.js"
+        ],
+        "matches": ["https://*.linkedin.com/*"]
+    }],
+    "icons": {
+        "64": "icons/icon-48.png"
     }
-  ],
-  "action": {
-    "default_popup": "popup/popup.html",
-    "default_icon": {
-      "64": "icons/icon-48.png"
-    }
-  },
-  "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.anthropic.com https://fslbhbywcxqmqhwdcgcl.supabase.co"
-  },
-  "icons": {
-    "64": "icons/icon-48.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["icons/icon-48.png", "icons/icon-48-yellow.png", "icons/icon-48-green.png", "popup/beta-validator-injector.js"],
-      "matches": ["https://*.linkedin.com/*"]
-    }
-  ]
 }
