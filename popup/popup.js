@@ -1,6 +1,6 @@
 import { createClient } from './supabase-client.js';
 import { checkBetaAccess } from './beta-validator.js';
-import { initAnalytics, trackEvent } from './analytics.js';
+import { initAnalytics, trackEvent, POSTHOG_API_KEY, POSTHOG_API_HOST } from './analytics.js';
 
 const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
@@ -381,8 +381,21 @@ document.addEventListener('DOMContentLoaded', async() => {
     }
 
     function testPostHogEvent() {
-        trackEvent('test_event', { testProperty: 'Test Value' });
-        console.log('PostHog event sent');
-        showStatus('PostHog test event sent successfully', 'success');
+        try {
+            const testProperties = {
+                testProperty: 'Test Value',
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                screenSize: `${window.screen.width}x${window.screen.height}`,
+                randomNumber: Math.random()
+            };
+
+            trackEvent('test_event', testProperties);
+            console.log('PostHog test event sent', testProperties);
+            showStatus('PostHog test event sent successfully', 'success');
+        } catch (error) {
+            console.error('Error in testPostHogEvent:', error);
+            showStatus(`Error sending PostHog test event: ${error.message}`, 'error');
+        }
     }
 });

@@ -1,6 +1,6 @@
 // analytics.js
-const POSTHOG_API_KEY = 'phc_xhWdv89FeaL8iaT13O5A8CL9zo6kyCGzRFCtihoZKUB';
-const POSTHOG_API_HOST = 'https://eu.i.posthog.com';
+export const POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
+export const POSTHOG_API_HOST = 'https://eu.i.posthog.com';
 
 export function initAnalytics(options = {}) {
     if (typeof window.posthog === 'undefined') {
@@ -20,11 +20,19 @@ export function initAnalytics(options = {}) {
  * Captures a generic event.
  */
 export function trackEvent(eventName, properties = {}) {
-    window.posthog.capture(eventName, {
-        timestamp: new Date().toISOString(),
-        ...properties
-    });
-    console.log(`Event tracked: ${eventName}`, properties);
+    try {
+        if (typeof window.posthog === 'undefined') {
+            throw new Error('PostHog is not initialized');
+        }
+        const eventProperties = {
+            timestamp: new Date().toISOString(),
+            ...properties
+        };
+        window.posthog.capture(eventName, eventProperties);
+        console.log(`Event tracked: ${eventName}`, eventProperties);
+    } catch (error) {
+        console.error(`Error tracking event ${eventName}:`, error);
+    }
 }
 
 /**
