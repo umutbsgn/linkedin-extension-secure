@@ -10,11 +10,26 @@ export async function checkBetaAccess(email) {
     console.log('Checking beta access for email:', email);
 
     try {
-        const response = await fetch(API_ENDPOINTS.BETA_ACCESS + `?email=${encodeURIComponent(email)}`);
+        // Construct the URL with proper error handling
+        const baseUrl = API_ENDPOINTS.BETA_ACCESS;
+        console.log('Beta access base URL:', baseUrl);
+
+        if (!baseUrl) {
+            throw new Error('Beta access endpoint URL is undefined');
+        }
+
+        const url = `${baseUrl}?email=${encodeURIComponent(email)}`;
+        console.log('Full beta access URL:', url);
+
+        // Make the request with additional logging
+        console.log('Sending beta access request...');
+        const response = await fetch(url);
+        console.log('Beta access response status:', response.status);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Failed to check beta access');
+            console.error('Beta access error data:', errorData);
+            throw new Error(errorData.error || `Failed to check beta access: ${response.status}`);
         }
 
         const result = await response.json();
