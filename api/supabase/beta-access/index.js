@@ -51,10 +51,23 @@ export default async function handler(req, res) {
         // Check if email is in beta whitelist
         console.log('Querying beta_whitelist table for email:', email);
         try {
+            // Ensure email is a string and properly formatted
+            if (typeof email !== 'string') {
+                console.error('Email is not a string:', typeof email);
+                return res.status(400).json({
+                    error: 'Invalid email format',
+                    details: 'Email must be a string'
+                });
+            }
+
+            const normalizedEmail = email.toLowerCase().trim();
+            console.log('Normalized email:', normalizedEmail);
+
+            // Query the beta_whitelist table
             const { data, error } = await supabase
                 .from('beta_whitelist')
                 .select('*')
-                .eq('email', email.toLowerCase().trim());
+                .eq('email', normalizedEmail);
 
             if (error) {
                 console.error('Supabase query error:', error);
@@ -72,6 +85,7 @@ export default async function handler(req, res) {
             const isAllowed = Array.isArray(data) && data.length > 0;
             console.log('Beta access check result:', isAllowed, 'Rows found:', data ? data.length : 0);
 
+            // Return a properly formatted JSON response
             return res.status(200).json({
                 allowed: isAllowed,
                 message: isAllowed ? 'Beta access confirmed' : 'This email is not authorized for beta access'
