@@ -1,7 +1,7 @@
 // Configuration for the LinkedIn AI Assistant browser extension
 
 // Vercel backend URL (change this to your deployed Vercel app URL)
-export const VERCEL_BACKEND_URL = 'https://linkedin-ai-assistant-proxy.vercel.app';
+export const VERCEL_BACKEND_URL = 'https://linkedin-extension-secure.vercel.app';
 
 // API endpoints
 export const API_ENDPOINTS = {

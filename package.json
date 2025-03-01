@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "description": "Backend for LinkedIn AI Assistant browser extension",
     "main": "index.js",
+    "type": "module",
     "scripts": {
         "dev": "vercel dev",
         "deploy": "vercel deploy --prod"
