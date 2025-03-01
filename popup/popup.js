@@ -412,23 +412,34 @@ document.addEventListener('DOMContentLoaded', async() => {
                 trackEvent('Beta_Access_Attempt', { email, allowed: true });
             }
 
-            // Use the Vercel backend for authentication
-            const authEndpoint = action === 'login' ? API_ENDPOINTS.LOGIN : API_ENDPOINTS.SIGNUP;
+            // TEMPORARY SOLUTION: Use direct Supabase authentication instead of Vercel backend
+            console.log(`Using direct Supabase authentication for ${action}`);
+            let result;
 
-            const response = await fetch(authEndpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, password })
-            });
+            if (action === 'login') {
+                const { data, error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password
+                });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || `${action} failed: ${response.status}`);
+                if (error) throw new Error(error.message);
+                result = {
+                    token: data.session.access_token,
+                    user: data.user
+                };
+            } else { // register
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password
+                });
+
+                if (error) throw new Error(error.message);
+                result = {
+                    token: data.session ? data.session.access_token : null,
+                    user: data.user
+                };
             }
 
-            const result = await response.json();
             console.log(`${action} result:`, result);
 
             // Store the token
