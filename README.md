@@ -118,14 +118,32 @@ This is the backend for the LinkedIn AI Assistant browser extension. It provides
 
 3. Add Environment Variables:
    - Add all the variables from your `.env` file to the Vercel project settings
+   - **IMPORTANT**: Make sure to set the following environment variables correctly:
+     - `SUPABASE_URL`: Your Supabase project URL (e.g., `https://fslbhbywcxqmqhwdcgcl.supabase.co`)
+     - `SUPABASE_ANON_KEY`: Your Supabase anon key (from Project Settings > API)
+     - `SUPABASE_SERVICE_KEY`: Your Supabase service role key (from Project Settings > API)
+     - `POSTHOG_API_KEY`: Your PostHog API key
+     - `POSTHOG_API_HOST`: Your PostHog API host (e.g., `https://eu.i.posthog.com`)
 
-4. Deploy:
+4. Configure Environment Variables in Vercel:
+   - Go to your project in Vercel
+   - Click on "Settings" > "Environment Variables"
+   - Add each variable with its exact name and value
+   - Make sure there are no typos or placeholders in the values
+   - After adding all variables, redeploy your project
+
+5. Deploy:
    - Click "Deploy"
    - Wait for the deployment to complete
    - Your API will be available at the provided Vercel URL
 
-5. Update the extension's config.js:
+6. Update the extension's config.js:
    - Set `VERCEL_BACKEND_URL` to your Vercel deployment URL
+
+7. Troubleshooting Environment Variables:
+   - If you encounter "Invalid URL" errors, check that `SUPABASE_URL` is set correctly
+   - Verify that the environment variables are available in the deployed functions
+   - You can check the Vercel logs for any errors related to missing or invalid environment variables
 
 ## API Endpoints
 
