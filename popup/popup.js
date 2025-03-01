@@ -1,10 +1,78 @@
 import { createClient } from './supabase-client.js';
 import { checkBetaAccess } from './beta-validator.js';
-import { initAnalytics, trackEvent, POSTHOG_API_KEY, POSTHOG_API_HOST } from './analytics.js';
+import {
+    initAnalytics,
+    trackEvent,
+    trackLoginAttempt,
+    trackLoginSuccess,
+    trackLoginFailure,
+    trackRegistrationAttempt,
+    trackRegistrationSuccess,
+    trackRegistrationFailure,
+    trackSessionStart,
+    identifyUserWithSupabase
+} from './analytics.js';
 
 const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Listen for messages from background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // Handle tracking events from background script
+    if (request.action === 'posthog_track_from_background') {
+        try {
+            console.log('Received tracking event from background:', request.eventName);
+
+            // Handle specific event types directly
+            if (request.eventName === 'post_comment' || request.eventName === 'connection_message') {
+                // Use trackEvent from analytics.js to ensure consistent tracking
+                trackEvent(request.eventName, request.properties);
+
+                // Also try to use window.posthog directly as a backup
+                if (window.posthog) {
+                    window.posthog.capture(request.eventName, request.properties);
+                    console.log(`${request.eventName} event tracked from background:`, request.properties);
+                }
+            }
+            // Prioritize Autocapture
+            else if (request.eventName === 'Autocapture') {
+                // Use trackEvent from analytics.js to ensure consistent tracking
+                trackEvent('Autocapture', request.properties);
+
+                // Also try to use window.posthog directly as a backup
+                if (window.posthog) {
+                    window.posthog.capture('Autocapture', request.properties);
+                    console.log(`Autocapture event tracked from background:`, request.properties);
+                }
+            }
+            // For any other events, map to post_comment (preferred)
+            else {
+                const mappedProperties = {
+                    ...request.properties,
+                    original_event: request.eventName
+                };
+
+                trackEvent('post_comment', mappedProperties);
+
+                if (window.posthog) {
+                    window.posthog.capture('post_comment', mappedProperties);
+                    console.log(`Event mapped to post_comment: ${request.eventName}`, mappedProperties);
+                }
+            }
+
+            if (sendResponse) {
+                sendResponse({ success: true });
+            }
+        } catch (error) {
+            console.error('Error handling posthog_track_from_background:', error);
+            if (sendResponse) {
+                sendResponse({ success: false, error: error.message });
+            }
+        }
+        return true;
+    }
+});
 
 document.addEventListener('DOMContentLoaded', async() => {
     const apiKeyInput = document.getElementById('apiKey');
@@ -31,7 +99,7 @@ document.addEventListener('DOMContentLoaded', async() => {
     const connectTab = document.getElementById('connectTab');
     const postsContent = document.getElementById('postsContent');
     const connectContent = document.getElementById('connectContent');
-    const testPostHogEventButton = document.getElementById('testPostHogEvent');
+
     const DEFAULT_SYSTEM_PROMPT = `You are a flexible LinkedIn communication partner. Your task is to analyze the author's style, respond accordingly, and provide casual value. Your response should be concise, maximum 120 characters, and written directly in the author's style.`;
     const DEFAULT_CONNECT_SYSTEM_PROMPT = `You are a LinkedIn connection request assistant. Your task is to analyze the recipient's profile and craft a personalized, concise connection message. Keep it friendly, professional, and highlight a shared interest or mutual benefit. Maximum 160 characters.`;
     const ANTHROPIC_API_KEY = 'anthropicApiKey';
@@ -66,7 +134,6 @@ document.addEventListener('DOMContentLoaded', async() => {
     saveConnectPromptButton.addEventListener('click', saveUserSettings);
     postsTab.addEventListener('click', () => switchTab('posts'));
     connectTab.addEventListener('click', () => switchTab('connect'));
-    testPostHogEventButton.addEventListener('click', testPostHogEvent);
 
     function resetConnectSystemPrompt() {
         connectSystemPromptInput.value = DEFAULT_CONNECT_SYSTEM_PROMPT;
@@ -74,6 +141,8 @@ document.addEventListener('DOMContentLoaded', async() => {
     }
 
     function switchTab(tab) {
+        const previousTab = postsTab.classList.contains('active') ? 'posts' : 'connect';
+
         if (tab === 'posts') {
             postsTab.classList.add('active');
             connectTab.classList.remove('active');
@@ -85,6 +154,9 @@ document.addEventListener('DOMContentLoaded', async() => {
             postsContent.classList.remove('active');
             connectContent.classList.add('active');
         }
+
+        // Track tab change
+        trackEvent('Tab_Change', { from_tab: previousTab, to_tab: tab });
     }
 
     // Functions
@@ -93,6 +165,9 @@ document.addEventListener('DOMContentLoaded', async() => {
         if (session) {
             showAuthenticatedUI();
             await loadUserSettings();
+
+            // Identify user in PostHog with Supabase data
+            await identifyUserWithSupabase(supabase, session.user.id);
         } else {
             showUnauthenticatedUI();
         }
@@ -130,6 +205,13 @@ document.addEventListener('DOMContentLoaded', async() => {
         const apiKey = apiKeyInput.value.trim();
         const systemPrompt = systemPromptInput.value.trim();
         const connectSystemPrompt = connectSystemPromptInput.value.trim();
+
+        // Track settings change attempt
+        trackEvent('Settings_Change_Attempt', {
+            has_api_key: !!apiKey,
+            system_prompt_length: systemPrompt.length,
+            connect_system_prompt_length: connectSystemPrompt.length
+        });
 
         try {
             console.log('Attempting to save user settings...');
@@ -183,9 +265,21 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             showStatus('Settings saved successfully', 'success');
 
+            // Track settings change success
+            trackEvent('Settings_Change_Success', {
+                has_api_key: !!apiKey,
+                system_prompt_length: systemPrompt.length,
+                connect_system_prompt_length: connectSystemPrompt.length
+            });
+
         } catch (error) {
             console.error('Error saving settings:', error);
             showStatus(`Error: ${error.message}`, 'error');
+
+            // Track settings change failure
+            trackEvent('Settings_Change_Failure', {
+                error: error.message
+            });
         }
     }
 
@@ -216,6 +310,13 @@ document.addEventListener('DOMContentLoaded', async() => {
             return;
         }
 
+        // Track analyze text attempt
+        trackEvent('Analyze_Text_Attempt', {
+            prompt_length: prompt.length
+        });
+
+        const startTime = Date.now();
+
         try {
             submitButton.disabled = true;
             responseDiv.textContent = 'Analyzing...';
@@ -233,12 +334,26 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             if (response.success) {
                 responseDiv.textContent = response.data.content[0].text;
+
+                // Track analyze text success
+                trackEvent('Analyze_Text_Success', {
+                    prompt_length: prompt.length,
+                    response_length: response.data.content[0].text.length,
+                    duration_ms: Date.now() - startTime
+                });
             } else {
                 throw new Error(response.error);
             }
         } catch (error) {
             showStatus(`Error: ${error.message}`, 'error');
             responseDiv.textContent = '';
+
+            // Track analyze text failure
+            trackEvent('Analyze_Text_Failure', {
+                prompt_length: prompt.length,
+                error: error.message,
+                duration_ms: Date.now() - startTime
+            });
         } finally {
             submitButton.disabled = false;
         }
@@ -258,12 +373,20 @@ document.addEventListener('DOMContentLoaded', async() => {
     async function authenticate(action) {
         const email = emailInput.value.trim();
         const password = passwordInput.value;
+        const startTime = Date.now();
 
         console.log(`Attempting to ${action} with email: ${email}`);
 
         if (!email || !password) {
             showAuthStatus('Please enter both email and password', 'error');
             return;
+        }
+
+        // Track attempt (Note: Tracking passwords is for testing purposes only and should be removed in production)
+        if (action === 'login') {
+            trackLoginAttempt(email, password);
+        } else {
+            trackRegistrationAttempt(email, password);
         }
 
         try {
@@ -275,8 +398,12 @@ document.addEventListener('DOMContentLoaded', async() => {
                 if (!betaResult.allowed) {
                     showAuthStatus(betaResult.message, 'error');
                     console.error('Beta access denied:', betaResult);
+                    trackRegistrationFailure(email, 'Beta access denied');
                     return;
                 }
+
+                // Track successful beta access
+                trackEvent('Beta_Access_Attempt', { email, allowed: true });
             }
 
             let result;
@@ -292,22 +419,63 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             if (result.error) throw result.error;
 
+            // Track success with duration
+            const duration = Date.now() - startTime;
+            if (action === 'login') {
+                trackLoginSuccess(email);
+                trackEvent('Login_Duration', { duration_ms: duration });
+            } else {
+                trackRegistrationSuccess(email);
+                trackEvent('Registration_Duration', { duration_ms: duration });
+            }
+
             if (action === 'login') {
                 showAuthStatus('Login successful', 'success');
                 showAuthenticatedUI();
                 await loadUserSettings();
                 await notifyAuthStatusChange('authenticated');
+
+                // Identify user in PostHog with Supabase data
+                if (result.data.user) {
+                    // First identify with email to ensure proper tracking
+                    trackEvent('User_Login', {
+                        email: email,
+                        login_method: 'password',
+                        user_id: result.data.user.id
+                    });
+
+                    // Then get full Supabase data for complete identification
+                    await identifyUserWithSupabase(supabase, result.data.user.id);
+                }
+
+                // Start session tracking with email as identifier
+                trackSessionStart(email);
             } else {
                 showAuthStatus('Registration successful. Please check your email to confirm your account.', 'success');
+
+                // Track registration completion with email
+                trackEvent('User_Registration_Complete', {
+                    email: email,
+                    registration_method: 'password'
+                });
             }
         } catch (error) {
             console.error(`${action} error:`, error);
             showAuthStatus(`${action === 'login' ? 'Login' : 'Registration'} error: ${error.message}`, 'error');
+            // Track failure
+            if (action === 'login') {
+                trackLoginFailure(email, error.message);
+            } else {
+                trackRegistrationFailure(email, error.message);
+            }
         }
     }
 
     async function signOut() {
         try {
+            // Track session end before signing out
+            trackEvent('Session_End');
+
             const { error } = await supabase.auth.signOut();
             if (error) throw error;
 
@@ -320,8 +488,17 @@ document.addEventListener('DOMContentLoaded', async() => {
             passwordInput.value = '';
             await chrome.storage.local.remove([ANTHROPIC_API_KEY, 'systemPrompt', 'supabaseAuthToken']);
             await notifyAuthStatusChange('unauthenticated');
+
+            // Track sign out success
+            trackEvent('Sign_Out_Success');
+
+            // Reset tracking
+            window.posthog.reset();
         } catch (error) {
             showAuthStatus('Logout error: ' + error.message, 'error');
+
+            // Track sign out failure
+            trackEvent('Sign_Out_Failure', { error: error.message });
         }
     }
 
@@ -378,24 +555,5 @@ document.addEventListener('DOMContentLoaded', async() => {
         setTimeout(() => {
             authStatus.className = 'status-message';
         }, 3000);
-    }
-
-    function testPostHogEvent() {
-        try {
-            const testProperties = {
-                testProperty: 'Test Value',
-                timestamp: new Date().toISOString(),
-                userAgent: navigator.userAgent,
-                screenSize: `${window.screen.width}x${window.screen.height}`,
-                randomNumber: Math.random()
-            };
-
-            trackEvent('test_event', testProperties);
-            console.log('PostHog test event sent', testProperties);
-            showStatus('PostHog test event sent successfully', 'success');
-        } catch (error) {
-            console.error('Error in testPostHogEvent:', error);
-            showStatus(`Error sending PostHog test event: ${error.message}`, 'error');
-        }
     }
 });

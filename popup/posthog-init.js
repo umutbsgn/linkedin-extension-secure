@@ -2,7 +2,7 @@
 
 import posthog from '../lib/posthog/posthog.js';
 
-const POSTHOG_API_KEY = 'phc_xhWdv89FeaL8iaT13O5A8CL9zo6kyCGzRFCtihoZKUB';
+const POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
 const POSTHOG_API_HOST = 'https://eu.i.posthog.com';
 
 export function initPostHog() {
