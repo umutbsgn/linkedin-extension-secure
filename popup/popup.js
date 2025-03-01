@@ -412,28 +412,41 @@ document.addEventListener('DOMContentLoaded', async() => {
                 trackEvent('Beta_Access_Attempt', { email, allowed: true });
             }
 
-            // Use the Vercel backend for authentication
-            console.log(`Using Vercel backend for ${action}`);
-            const authEndpoint = action === 'login' ? API_ENDPOINTS.LOGIN : API_ENDPOINTS.SIGNUP;
+            // TEMPORARY SOLUTION: Use direct Supabase authentication instead of Vercel backend
+            // due to environment variable issues in Vercel
+            console.log(`Using direct Supabase authentication for ${action} (TEMPORARY SOLUTION)`);
+            let result;
 
-            console.log(`Auth endpoint: ${authEndpoint}`);
-            const response = await fetch(authEndpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, password })
-            });
+            try {
+                if (action === 'login') {
+                    const { data, error } = await supabase.auth.signInWithPassword({
+                        email,
+                        password
+                    });
 
-            console.log(`Auth response status: ${response.status}`);
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('Auth error data:', errorData);
-                throw new Error(errorData.error || `${action} failed: ${response.status}`);
+                    if (error) throw new Error(error.message);
+                    result = {
+                        token: data.session.access_token,
+                        user: data.user
+                    };
+                } else { // register
+                    const { data, error } = await supabase.auth.signUp({
+                        email,
+                        password
+                    });
+
+                    if (error) throw new Error(error.message);
+                    result = {
+                        token: data.session ? data.session.access_token : null,
+                        user: data.user
+                    };
+                }
+
+                console.log(`${action} result:`, result);
+            } catch (authError) {
+                console.error(`Direct Supabase authentication error:`, authError);
+                throw authError;
             }
-
-            const result = await response.json();
-            console.log(`${action} result:`, result);
 
             // Store the token
             if (result.token) {
