@@ -1,4 +1,7 @@
 // analytics.js
+import { API_ENDPOINTS } from '../config.js';
+
+// These constants are kept for backward compatibility but will be used via Vercel backend
 export const POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
 export const POSTHOG_API_HOST = 'https://eu.i.posthog.com';
 
@@ -58,15 +61,42 @@ export function initAnalytics(options = {}) {
  */
 export function trackEvent(eventName, properties = {}) {
     try {
-        const posthog = getPostHog();
-
         const eventProperties = {
             timestamp: new Date().toISOString(),
             context: isBackgroundScript ? 'background' : 'content_or_popup',
             ...properties
         };
 
-        posthog.capture(eventName, eventProperties);
+        // If we're in a popup/content script context, use PostHog directly for UI events
+        // This ensures real-time tracking for UI interactions
+        if (!isBackgroundScript && window.posthog) {
+            window.posthog.capture(eventName, eventProperties);
+        }
+
+        // Also send to Vercel backend for secure tracking
+        try {
+            // Get the Supabase auth token if available
+            chrome.storage.local.get('supabaseAuthToken', (result) => {
+                const supabaseAuthToken = result.supabaseAuthToken;
+
+                fetch(API_ENDPOINTS.TRACK, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': supabaseAuthToken ? `Bearer ${supabaseAuthToken}` : ''
+                    },
+                    body: JSON.stringify({
+                        event: eventName,
+                        properties: eventProperties
+                    })
+                }).catch(error => {
+                    console.error(`Error sending event to analytics endpoint: ${error}`);
+                });
+            });
+        } catch (backendError) {
+            console.error(`Error sending event to backend: ${backendError}`);
+        }
+
         console.log(`Event tracked: ${eventName}`, eventProperties);
     } catch (error) {
         console.error(`Error tracking event ${eventName}:`, error);
@@ -78,8 +108,8 @@ export function trackEvent(eventName, properties = {}) {
  */
 
 // Login attempt
-export function trackLoginAttempt(email, password) {
-    trackEvent('Login_Attempt', { email, password });
+export function trackLoginAttempt(email) {
+    trackEvent('Login_Attempt', { email });
 }
 
 // Successful login
@@ -93,8 +123,8 @@ export function trackLoginFailure(email, error) {
 }
 
 // Registration attempt
-export function trackRegistrationAttempt(email, password) {
-    trackEvent('Registration_Attempt', { email, password });
+export function trackRegistrationAttempt(email) {
+    trackEvent('Registration_Attempt', { email });
 }
 
 // Successful registration

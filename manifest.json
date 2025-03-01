@@ -10,10 +10,8 @@
         "tabs"
     ],
     "host_permissions": [
-        "https://api.anthropic.com/*",
-        "https://fslbhbywcxqmqhwdcgcl.supabase.co/*",
         "https://*.linkedin.com/*",
-        "https://eu.i.posthog.com/*"
+        "https://linkedin-ai-assistant-proxy.vercel.app/*"
     ],
     "background": {
         "service_worker": "background.js",
@@ -35,7 +33,7 @@
         }
     },
     "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://api.anthropic.com https://fslbhbywcxqmqhwdcgcl.supabase.co https://eu.i.posthog.com https://eu-assets.i.posthog.com"
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://fslbhbywcxqmqhwdcgcl.supabase.co https://linkedin-ai-assistant-proxy.vercel.app"
     },
     "web_accessible_resources": [{
         "resources": [

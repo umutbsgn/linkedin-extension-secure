@@ -1,0 +1,24 @@
+{
+    "name": "linkedin-extension-backend",
+    "version": "1.0.0",
+    "description": "Backend for LinkedIn AI Assistant browser extension",
+    "main": "index.js",
+    "scripts": {
+        "dev": "vercel dev",
+        "deploy": "vercel deploy --prod"
+    },
+    "keywords": [
+        "vercel",
+        "api",
+        "linkedin",
+        "extension"
+    ],
+    "author": "",
+    "license": "MIT",
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.10.0",
+        "@supabase/supabase-js": "^2.38.0",
+        "@vercel/node": "^3.0.11",
+        "posthog-node": "^3.1.2"
+    }
+}

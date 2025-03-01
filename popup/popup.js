@@ -1,5 +1,6 @@
 import { createClient } from './supabase-client.js';
 import { checkBetaAccess } from './beta-validator.js';
+import { API_ENDPOINTS } from '../config.js';
 import {
     initAnalytics,
     trackEvent,
@@ -13,9 +14,12 @@ import {
     identifyUserWithSupabase
 } from './analytics.js';
 
-const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Supabase client is only used for authentication
+// All data operations go through the Vercel backend
+const supabase = createClient(
+    'https://fslbhbywcxqmqhwdcgcl.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
+);
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -176,12 +180,25 @@ document.addEventListener('DOMContentLoaded', async() => {
 
     async function loadUserSettings() {
         try {
-            const { data, error } = await supabase
-                .from('user_settings')
-                .select('*')
-                .single();
+            // Get the Supabase auth token
+            const { supabaseAuthToken } = await chrome.storage.local.get('supabaseAuthToken');
+            if (!supabaseAuthToken) {
+                throw new Error('Authentication required');
+            }
 
-            if (error) throw error;
+            // Get user settings from Vercel backend
+            const response = await fetch(API_ENDPOINTS.USER_SETTINGS, {
+                headers: {
+                    'Authorization': `Bearer ${supabaseAuthToken}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || 'Failed to fetch user settings');
+            }
+
+            const data = await response.json();
 
             if (data) {
                 apiKeyInput.value = data.api_key || '';
@@ -216,13 +233,10 @@ document.addEventListener('DOMContentLoaded', async() => {
         try {
             console.log('Attempting to save user settings...');
 
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) {
-                throw new Error('Failed to get user session: ' + sessionError.message);
-            }
-
-            if (!session || !session.user) {
-                throw new Error('User not authenticated');
+            // Get the Supabase auth token
+            const { supabaseAuthToken } = await chrome.storage.local.get('supabaseAuthToken');
+            if (!supabaseAuthToken) {
+                throw new Error('Authentication required');
             }
 
             const settingsData = {
@@ -232,28 +246,19 @@ document.addEventListener('DOMContentLoaded', async() => {
                 updated_at: new Date().toISOString()
             };
 
-            // Try to update first
-            const { data: updateData, error: updateError } = await supabase
-                .from('user_settings')
-                .update(settingsData)
-                .eq('user_id', session.user.id);
+            // Save settings using the Vercel backend
+            const response = await fetch(API_ENDPOINTS.USER_SETTINGS, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${supabaseAuthToken}`
+                },
+                body: JSON.stringify(settingsData)
+            });
 
-            console.log('Update result:', { updateData, updateError });
-
-            // If no rows were updated, try an insert
-            if (!updateData || (updateError && updateError.message === 'No rows were updated')) {
-                console.log('No rows updated, attempting insert...');
-                const { data: insertData, error: insertError } = await supabase
-                    .from('user_settings')
-                    .insert({
-                        ...settingsData,
-                        user_id: session.user.id
-                    });
-
-                if (insertError) {
-                    throw new Error('Failed to save settings: ' + insertError.message);
-                }
-                console.log('Insert result:', insertData);
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `Failed to save settings: ${response.status}`);
             }
 
             // Update local storage
@@ -382,19 +387,20 @@ document.addEventListener('DOMContentLoaded', async() => {
             return;
         }
 
-        // Track attempt (Note: Tracking passwords is for testing purposes only and should be removed in production)
+        // Track attempt
         if (action === 'login') {
-            trackLoginAttempt(email, password);
+            trackLoginAttempt(email);
         } else {
-            trackRegistrationAttempt(email, password);
+            trackRegistrationAttempt(email);
         }
 
         try {
             if (action === 'register') {
                 // Perform beta access check before registration
                 console.log('Performing beta access check');
-                const betaResult = await checkBetaAccess(supabase, email);
+                const betaResult = await checkBetaAccess(email);
                 console.log('Beta access check result:', betaResult);
+
                 if (!betaResult.allowed) {
                     showAuthStatus(betaResult.message, 'error');
                     console.error('Beta access denied:', betaResult);
@@ -406,18 +412,35 @@ document.addEventListener('DOMContentLoaded', async() => {
                 trackEvent('Beta_Access_Attempt', { email, allowed: true });
             }
 
-            let result;
-            if (action === 'login') {
-                console.log('Attempting login');
-                result = await supabase.auth.signInWithPassword({ email, password });
-            } else {
-                console.log('Attempting registration');
-                result = await supabase.auth.signUp({ email, password });
+            // Use the Vercel backend for authentication
+            const authEndpoint = action === 'login' ? API_ENDPOINTS.LOGIN : API_ENDPOINTS.SIGNUP;
+
+            const response = await fetch(authEndpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error || `${action} failed: ${response.status}`);
             }
 
+            const result = await response.json();
             console.log(`${action} result:`, result);
 
-            if (result.error) throw result.error;
+            // Store the token
+            if (result.token) {
+                await chrome.storage.local.set({ supabaseAuthToken: result.token });
+
+                // Also store in background script
+                await chrome.runtime.sendMessage({
+                    action: 'storeSupabaseToken',
+                    token: result.token
+                });
+            }
 
             // Track success with duration
             const duration = Date.now() - startTime;
@@ -435,18 +458,12 @@ document.addEventListener('DOMContentLoaded', async() => {
                 await loadUserSettings();
                 await notifyAuthStatusChange('authenticated');
 
-                // Identify user in PostHog with Supabase data
-                if (result.data.user) {
-                    // First identify with email to ensure proper tracking
-                    trackEvent('User_Login', {
-                        email: email,
-                        login_method: 'password',
-                        user_id: result.data.user.id
-                    });
-
-                    // Then get full Supabase data for complete identification
-                    await identifyUserWithSupabase(supabase, result.data.user.id);
-                }
+                // First identify with email to ensure proper tracking
+                trackEvent('User_Login', {
+                    email: email,
+                    login_method: 'password',
+                    user_id: result.user ? result.user.id : undefined
+                });
 
                 // Start session tracking with email as identifier
                 trackSessionStart(email);
