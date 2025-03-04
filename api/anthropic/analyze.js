@@ -91,7 +91,8 @@ export default async function handler(req, res) {
             headers: {
                 "x-api-key": apiKey,
                 "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
+                "content-type": "application/json",
+                "anthropic-dangerous-direct-browser-access": "true" // Allow direct browser access
             },
             body: JSON.stringify({
                 model: "claude-3-5-sonnet-20241022",
