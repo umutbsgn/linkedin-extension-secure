@@ -7,10 +7,10 @@
         { "src": "/api/(.*)", "dest": "/api/$1" }
     ],
     "env": {
-        "SUPABASE_URL": "@supabase_url",
-        "SUPABASE_ANON_KEY": "@supabase_anon_key",
-        "SUPABASE_SERVICE_KEY": "@supabase_service_key",
-        "POSTHOG_API_KEY": "@posthog_api_key",
-        "POSTHOG_API_HOST": "@posthog_api_host"
+        "SUPABASE_URL": "https://fslbhbywcxqmqhwdcgcl.supabase.co",
+        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM",
+        "SUPABASE_SERVICE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTczODQxNzYxNCwiZXhwIjoyMDUzOTkzNjE0fQ.zjuTJIagfHXgjLLgsoG7JhIOWSN7kQzgvOoKji4FlpA",
+        "POSTHOG_API_KEY": "phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar",
+        "POSTHOG_API_HOST": "https://eu.i.posthog.com"
     }
 }
