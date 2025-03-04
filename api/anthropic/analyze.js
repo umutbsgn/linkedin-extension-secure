@@ -1,11 +1,28 @@
 // api/anthropic/analyze.js
 // Secure proxy for Anthropic API calls
 
+import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
+
 export default async function handler(req, res) {
     // Only allow POST requests
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
+
+    // Extract user identifier if available
+    const authHeader = req.headers.authorization;
+    let userId = 'anonymous_user';
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        // If we have an auth token, we could potentially extract user info
+        // This would require additional logic to validate the token
+        userId = 'authenticated_user'; // Placeholder, should be replaced with actual user ID
+    }
+
+    // Start tracking the API call
+    const startTime = trackApiCallStart('anthropic_messages', {
+        prompt_length: req.body.text ? req.body.text.length : 0,
+        system_prompt_length: req.body.systemPrompt ? req.body.systemPrompt.length : 0
+    }, userId);
 
     try {
         // Get API key from environment variables
@@ -50,8 +67,19 @@ export default async function handler(req, res) {
 
         // Return successful response
         const data = await response.json();
+
+        // Track successful API call
+        const responseSize = JSON.stringify(data).length;
+        trackApiCallSuccess('anthropic_messages', startTime, {
+            response_size_bytes: responseSize,
+            content_length: data.content && data.content[0] && data.content[0].text ? data.content[0].text.length : 0
+        }, userId);
+
         return res.status(200).json(data);
     } catch (error) {
+        // Track failed API call
+        trackApiCallFailure('anthropic_messages', startTime, error.message, {}, userId);
+
         console.error('Error in Anthropic API proxy:', error);
         return res.status(500).json({ error: error.message });
     }

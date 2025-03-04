@@ -6,6 +6,12 @@ A Chrome extension for AI-powered LinkedIn interactions using Claude AI by Anthr
 
 This extension has been secured by moving all API keys to a Vercel backend. All API calls are now routed through the Vercel backend, ensuring that sensitive API keys are not exposed in the client-side code.
 
+### Key Security Features
+
+1. **API Key Protection**: All API keys (Anthropic, Supabase, PostHog) are stored securely as environment variables on the Vercel backend.
+2. **Comprehensive Tracking**: All API calls are tracked through PostHog for monitoring and analytics.
+3. **Reduced Permissions**: The extension's permissions have been minimized to only what's necessary.
+
 ## Deployment Instructions
 
 ### 1. Deploy the Vercel Backend
@@ -43,12 +49,21 @@ All API keys are stored securely as environment variables in the Vercel backend,
 
 The Vercel backend provides the following API endpoints:
 
-- `/api/anthropic/analyze`: Proxy for Anthropic API calls
-- `/api/supabase/auth/login`: Handle Supabase login
-- `/api/supabase/auth/signup`: Handle Supabase signup
-- `/api/supabase/user-settings`: Handle user settings operations
-- `/api/supabase/beta-access`: Handle beta access verification
+- `/api/anthropic/analyze`: Proxy for Anthropic API calls with tracking
+- `/api/supabase/auth/login`: Handle Supabase login with tracking
+- `/api/supabase/auth/signup`: Handle Supabase signup with tracking
+- `/api/supabase/user-settings`: Handle user settings operations with tracking
+- `/api/supabase/beta-access`: Handle beta access verification with tracking
 - `/api/analytics/track`: Handle PostHog analytics tracking
+
+### Tracking Implementation
+
+All API endpoints include comprehensive tracking:
+
+1. **Request Tracking**: Every API call is tracked with details like method, parameters, and user ID
+2. **Success Tracking**: Successful API calls are tracked with response metrics
+3. **Error Tracking**: Failed API calls are tracked with error details
+4. **Performance Metrics**: Response times are tracked for all API calls
 
 ## Development
 
