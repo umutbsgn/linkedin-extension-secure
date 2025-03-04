@@ -93,11 +93,20 @@ async function callAnthropicAPI(prompt, systemPrompt) {
     });
 
     try {
-        // Call the Vercel backend endpoint instead of Anthropic directly
+        // Get auth token
+        const result = await chrome.storage.local.get('supabaseAuthToken');
+        const token = result.supabaseAuthToken;
+
+        if (!token) {
+            throw new Error('Not authenticated. Please log in first.');
+        }
+
+        // Call the Vercel backend endpoint with auth token
         const response = await fetch(API_ENDPOINTS.ANALYZE, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`
             },
             body: JSON.stringify({
                 text: prompt,

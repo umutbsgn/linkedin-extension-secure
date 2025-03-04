@@ -1,6 +1,7 @@
 // api/anthropic/analyze.js
 // Secure proxy for Anthropic API calls
 
+import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
 
 export default async function handler(req, res) {
@@ -9,14 +10,14 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // Extract user identifier if available
+    // Get authorization token from request headers
     const authHeader = req.headers.authorization;
-    let userId = 'anonymous_user';
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        // If we have an auth token, we could potentially extract user info
-        // This would require additional logic to validate the token
-        userId = 'authenticated_user'; // Placeholder, should be replaced with actual user ID
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
     }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let userId = 'anonymous_user';
 
     // Start tracking the API call
     const startTime = trackApiCallStart('anthropic_messages', {
@@ -25,15 +26,53 @@ export default async function handler(req, res) {
     }, userId);
 
     try {
-        // Extract data from request
-        const { text, systemPrompt, apiKey } = req.body;
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
 
-        if (!text) {
-            return res.status(400).json({ error: 'Missing required parameter: text' });
+        if (!supabaseUrl || !supabaseKey) {
+            trackApiCallFailure('anthropic_messages', startTime, 'Supabase credentials not configured on server');
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
         }
 
-        if (!apiKey) {
-            return res.status(400).json({ error: 'Missing required parameter: apiKey' });
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            trackApiCallFailure('anthropic_messages', startTime, authError ? authError.message : 'Invalid or expired token');
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        userId = user.id; // Update userId with actual user ID
+
+        // Get user settings including API key
+        const { data: userSettings, error: settingsError } = await supabase
+            .from('user_settings')
+            .select('api_key')
+            .eq('user_id', userId)
+            .single();
+
+        if (settingsError || !userSettings || !userSettings.api_key) {
+            trackApiCallFailure('anthropic_messages', startTime,
+                settingsError ? settingsError.message : 'API key not found in user settings', {}, user.email || userId);
+            return res.status(400).json({
+                error: 'API key not found in user settings. Please add your Anthropic API key in the extension settings.'
+            });
+        }
+
+        const apiKey = userSettings.api_key;
+
+        // Extract data from request
+        const { text, systemPrompt } = req.body;
+
+        if (!text) {
+            trackApiCallFailure('anthropic_messages', startTime, 'Missing required parameter: text', {}, user.email || userId);
+            return res.status(400).json({ error: 'Missing required parameter: text' });
         }
 
         // Call Anthropic API
