@@ -11,7 +11,8 @@
     ],
     "host_permissions": [
         "https://*.linkedin.com/*",
-        "https://linkedin-extension-secure-elew.vercel.app/*"
+        "https://linkedin-extension-secure-elew.vercel.app/*",
+        "https://linkedin-extension-secure-elew-git-main-umutbsgns-projects.vercel.app/*"
     ],
     "background": {
         "service_worker": "background.js",
@@ -33,7 +34,7 @@
         }
     },
     "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://linkedin-extension-secure-elew.vercel.app"
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://linkedin-extension-secure-elew.vercel.app https://linkedin-extension-secure-elew-git-main-umutbsgns-projects.vercel.app"
     },
     "web_accessible_resources": [{
         "resources": [
