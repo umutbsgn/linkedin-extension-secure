@@ -11,8 +11,7 @@
     ],
     "host_permissions": [
         "https://*.linkedin.com/*",
-        "https://linkedin-ai-assistant-proxy.vercel.app/*",
-        "https://linkedin-extension-secure.vercel.app/*"
+        "https://linkedin-ai-assistant-proxy.vercel.app/*"
     ],
     "background": {
         "service_worker": "background.js",
@@ -34,7 +33,7 @@
         }
     },
     "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://fslbhbywcxqmqhwdcgcl.supabase.co https://linkedin-ai-assistant-proxy.vercel.app https://linkedin-extension-secure.vercel.app"
+        "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://linkedin-ai-assistant-proxy.vercel.app"
     },
     "web_accessible_resources": [{
         "resources": [

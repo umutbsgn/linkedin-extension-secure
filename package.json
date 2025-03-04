@@ -1,25 +1,21 @@
 {
-    "name": "linkedin-extension-backend",
+    "name": "linkedin-ai-assistant-proxy",
     "version": "1.0.0",
-    "description": "Backend for LinkedIn AI Assistant browser extension",
+    "description": "Secure backend for LinkedIn AI Assistant Chrome Extension",
     "main": "index.js",
-    "type": "module",
     "scripts": {
         "dev": "vercel dev",
         "deploy": "vercel deploy --prod"
     },
-    "keywords": [
-        "vercel",
-        "api",
-        "linkedin",
-        "extension"
-    ],
-    "author": "",
-    "license": "MIT",
     "dependencies": {
-        "@anthropic-ai/sdk": "^0.10.0",
         "@supabase/supabase-js": "^2.38.0",
-        "@vercel/node": "^3.0.11",
-        "posthog-node": "^3.1.2"
-    }
+        "axios": "^1.5.0"
+    },
+    "devDependencies": {
+        "vercel": "^32.3.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "private": true
 }

@@ -1,8 +1,9 @@
 // analytics.js
+// Import API endpoints for secure tracking
 import { API_ENDPOINTS } from '../config.js';
 
-// These constants are kept for backward compatibility but will be used via Vercel backend
-export const POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
+// These constants are kept for backward compatibility but will be removed in future
+export const POSTHOG_API_KEY = 'removed-for-security';
 export const POSTHOG_API_HOST = 'https://eu.i.posthog.com';
 
 // Check if we're in a background script or content script/popup context
@@ -47,6 +48,8 @@ export function initAnalytics(options = {}) {
         return;
     }
 
+    // We still initialize PostHog client-side for backward compatibility
+    // but actual tracking will go through the Vercel backend
     window.posthog.init(POSTHOG_API_KEY, {
         api_host: POSTHOG_API_HOST,
         person_profiles: 'identified_only',
@@ -61,43 +64,50 @@ export function initAnalytics(options = {}) {
  */
 export function trackEvent(eventName, properties = {}) {
     try {
+        // If in background script, use the existing mechanism
+        if (isBackgroundScript) {
+            const posthog = getPostHog();
+
+            const eventProperties = {
+                timestamp: new Date().toISOString(),
+                context: 'background',
+                ...properties
+            };
+
+            posthog.capture(eventName, eventProperties);
+            console.log(`Event tracked via background: ${eventName}`, eventProperties);
+            return;
+        }
+
+        // In popup/content script, use the Vercel backend
         const eventProperties = {
             timestamp: new Date().toISOString(),
-            context: isBackgroundScript ? 'background' : 'content_or_popup',
+            context: 'content_or_popup',
             ...properties
         };
 
-        // If we're in a popup/content script context, use PostHog directly for UI events
-        // This ensures real-time tracking for UI interactions
-        if (!isBackgroundScript && window.posthog) {
-            window.posthog.capture(eventName, eventProperties);
+        // Get user email if available
+        let distinctId = 'anonymous_user';
+        if (window.localStorage.getItem('userEmail')) {
+            distinctId = window.localStorage.getItem('userEmail');
         }
 
-        // Also send to Vercel backend for secure tracking
-        try {
-            // Get the Supabase auth token if available
-            chrome.storage.local.get('supabaseAuthToken', (result) => {
-                const supabaseAuthToken = result.supabaseAuthToken;
+        // Send to Vercel backend
+        fetch(API_ENDPOINTS.TRACK, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                eventName: eventName,
+                properties: eventProperties,
+                distinctId: distinctId
+            })
+        }).catch(error => {
+            console.error(`Error sending event to tracking endpoint: ${error}`);
+        });
 
-                fetch(API_ENDPOINTS.TRACK, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': supabaseAuthToken ? `Bearer ${supabaseAuthToken}` : ''
-                    },
-                    body: JSON.stringify({
-                        event: eventName,
-                        properties: eventProperties
-                    })
-                }).catch(error => {
-                    console.error(`Error sending event to analytics endpoint: ${error}`);
-                });
-            });
-        } catch (backendError) {
-            console.error(`Error sending event to backend: ${backendError}`);
-        }
-
-        console.log(`Event tracked: ${eventName}`, eventProperties);
+        console.log(`Event tracked via Vercel: ${eventName}`, eventProperties);
     } catch (error) {
         console.error(`Error tracking event ${eventName}:`, error);
     }
@@ -108,12 +118,20 @@ export function trackEvent(eventName, properties = {}) {
  */
 
 // Login attempt
-export function trackLoginAttempt(email) {
+export function trackLoginAttempt(email, password) {
+    // Store email for future tracking
+    if (email && !isBackgroundScript) {
+        window.localStorage.setItem('userEmail', email);
+    }
     trackEvent('Login_Attempt', { email });
 }
 
 // Successful login
 export function trackLoginSuccess(email) {
+    // Store email for future tracking
+    if (email && !isBackgroundScript) {
+        window.localStorage.setItem('userEmail', email);
+    }
     trackEvent('Login_Success', { email });
 }
 
@@ -123,12 +141,16 @@ export function trackLoginFailure(email, error) {
 }
 
 // Registration attempt
-export function trackRegistrationAttempt(email) {
+export function trackRegistrationAttempt(email, password) {
     trackEvent('Registration_Attempt', { email });
 }
 
 // Successful registration
 export function trackRegistrationSuccess(email) {
+    // Store email for future tracking
+    if (email && !isBackgroundScript) {
+        window.localStorage.setItem('userEmail', email);
+    }
     trackEvent('Registration_Success', { email });
 }
 
@@ -272,6 +294,11 @@ export function trackApiCallFailure(endpoint, error, statusCode) {
 
 // Track session start
 export function trackSessionStart(email) {
+    // Store email for future tracking
+    if (email && !isBackgroundScript) {
+        window.localStorage.setItem('userEmail', email);
+    }
+
     const sessionStartTime = Date.now();
     // Store the start time in localStorage
     localStorage.setItem('session_start_time', sessionStartTime);
@@ -352,11 +379,17 @@ export function trackOperationTime(operationName, durationMs, context = {}) {
 
 // User identification (after successful login)
 export function identifyUser(userId, userProperties = {}) {
+    // Store user ID for future tracking
+    if (userId && !isBackgroundScript) {
+        window.localStorage.setItem('userEmail', userId);
+    }
+
     if (isBackgroundScript) {
         console.log(`User identification skipped in background script for: ${userId}`);
         return;
     }
 
+    // We still use PostHog client-side for backward compatibility
     const posthog = getPostHog();
     posthog.identify(userId);
 
@@ -364,6 +397,12 @@ export function identifyUser(userId, userProperties = {}) {
     if (Object.keys(userProperties).length > 0) {
         posthog.people.set(userProperties);
     }
+
+    // Also track via Vercel backend
+    trackEvent('User_Identified', {
+        user_id: userId,
+        ...userProperties
+    });
 
     console.log(`User identified: ${userId}`, userProperties);
 }
@@ -375,8 +414,15 @@ export function aliasUser(newId) {
         return;
     }
 
+    // We still use PostHog client-side for backward compatibility
     const posthog = getPostHog();
     posthog.alias(newId);
+
+    // Also track via Vercel backend
+    trackEvent('User_Aliased', {
+        new_id: newId
+    });
+
     console.log(`User aliased: ${newId}`);
 }
 
@@ -393,6 +439,11 @@ export async function identifyUserWithSupabase(supabase, userId) {
         if (error) throw error;
 
         if (data && data.email) {
+            // Store email for future tracking
+            if (data.email && !isBackgroundScript) {
+                window.localStorage.setItem('userEmail', data.email);
+            }
+
             // Get additional user data if available
             let additionalData = {};
             try {
@@ -488,8 +539,18 @@ export function resetTracking() {
         return;
     }
 
+    // Clear stored email
+    window.localStorage.removeItem('userEmail');
+
+    // We still use PostHog client-side for backward compatibility
     const posthog = getPostHog();
     posthog.reset();
+
+    // Also track via Vercel backend
+    trackEvent('Tracking_Reset', {
+        timestamp: new Date().toISOString()
+    });
+
     console.log('PostHog tracking reset');
 }
 

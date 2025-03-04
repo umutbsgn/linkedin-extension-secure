@@ -1,73 +1,58 @@
-import { Anthropic } from '@anthropic-ai/sdk';
-import { createClient } from '@supabase/supabase-js';
+// api/anthropic/analyze.js
+// Secure proxy for Anthropic API calls
 
 export default async function handler(req, res) {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
+    // Only allow POST requests
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
     try {
-        // Verify authentication token
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Unauthorized' });
+        // Get API key from environment variables
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) {
+            return res.status(500).json({ error: 'API key not configured on server' });
         }
 
-        const token = authHeader.split(' ')[1];
+        // Extract data from request
+        const { text, systemPrompt } = req.body;
 
-        // Initialize Supabase client
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_KEY
-        );
-
-        // Verify the token and get user
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-        if (authError || !user) {
-            return res.status(401).json({ error: 'Invalid authentication token' });
+        if (!text) {
+            return res.status(400).json({ error: 'Missing required parameter: text' });
         }
-
-        // Get user's API key from user_settings
-        const { data: settings, error: settingsError } = await supabase
-            .from('user_settings')
-            .select('api_key')
-            .eq('user_id', user.id)
-            .single();
-
-        if (settingsError || !settings || !settings.api_key) {
-            return res.status(400).json({ error: 'API key not found in user settings' });
-        }
-
-        const { prompt, systemPrompt } = req.body;
-
-        // Initialize Anthropic client with user's API key
-        const anthropic = new Anthropic({
-            apiKey: settings.api_key,
-        });
 
         // Call Anthropic API
-        const response = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 1024,
-            system: systemPrompt,
-            messages: [
-                { role: "user", content: prompt }
-            ]
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+                "x-api-key": apiKey,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "claude-3-5-sonnet-20241022",
+                max_tokens: 1024,
+                system: systemPrompt || "",
+                messages: [
+                    { role: "user", content: text }
+                ]
+            })
         });
 
-        return res.status(200).json(response);
+        // Handle API response
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error && errorData.error.message || response.statusText;
+            return res.status(response.status).json({
+                error: `API call failed: ${response.status} - ${errorMessage}`
+            });
+        }
+
+        // Return successful response
+        const data = await response.json();
+        return res.status(200).json(data);
     } catch (error) {
-        console.error('Anthropic API error:', error);
+        console.error('Error in Anthropic API proxy:', error);
         return res.status(500).json({ error: error.message });
     }
 }

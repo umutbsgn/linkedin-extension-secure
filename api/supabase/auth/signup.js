@@ -1,93 +1,68 @@
+// api/supabase/auth/signup.js
+// Secure proxy for Supabase registration
+
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-    console.log('Signup API called with method:', req.method);
-
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
+    // Only allow POST requests
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
     try {
-        const { email, password } = req.body;
-        console.log('Signup attempt for email:', email);
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
-        if (!email || !password) {
-            console.error('Missing email or password');
-            return res.status(400).json({ error: 'Email and password are required' });
-        }
-
-        // Check environment variables
-        console.log('SUPABASE_URL defined:', !!process.env.SUPABASE_URL);
-        console.log('SUPABASE_ANON_KEY defined:', !!process.env.SUPABASE_ANON_KEY);
-        console.log('SUPABASE_SERVICE_KEY defined:', !!process.env.SUPABASE_SERVICE_KEY);
-
-        if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
-            console.error('Missing required environment variables:', {
-                SUPABASE_URL_defined: !!process.env.SUPABASE_URL,
-                SUPABASE_ANON_KEY_defined: !!process.env.SUPABASE_ANON_KEY
-            });
-            return res.status(500).json({
-                error: 'Server configuration error: Missing required environment variables',
-                details: {
-                    SUPABASE_URL_defined: !!process.env.SUPABASE_URL,
-                    SUPABASE_ANON_KEY_defined: !!process.env.SUPABASE_ANON_KEY
-                }
-            });
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
         }
 
         // Initialize Supabase client
-        console.log('Initializing Supabase client...');
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_ANON_KEY
-        );
-        console.log('Supabase client initialized');
+        const supabase = createClient(supabaseUrl, supabaseKey);
 
-        // Sign up user
-        console.log('Attempting to sign up user...');
+        // Extract registration data from request
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Missing required parameters: email and password' });
+        }
+
+        // Check beta access if required
+        if (process.env.REQUIRE_BETA_ACCESS === 'true') {
+            const { data: betaData, error: betaError } = await supabase
+                .from('beta_whitelist')
+                .select('*')
+                .eq('email', email)
+                .single();
+
+            if (betaError || !betaData) {
+                return res.status(403).json({
+                    error: 'This email is not authorized for beta access'
+                });
+            }
+        }
+
+        // Register with Supabase
         const { data, error } = await supabase.auth.signUp({
             email,
             password
         });
 
+        // Handle registration errors
         if (error) {
-            console.error('Supabase signup error:', error);
             return res.status(400).json({
-                error: error.message,
-                details: {
-                    code: error.code,
-                    status: error.status
-                }
+                error: error.message || 'Registration failed'
             });
         }
 
-        // If email confirmation is required
-        if (data.user && data.user.identities && data.user.identities.length === 0) {
-            console.log('Email confirmation required for:', email);
-            return res.status(200).json({
-                message: 'Check your email for the confirmation link'
-            });
-        }
-
-        console.log('Signup successful for user:', data.user.id);
+        // Return successful response with user data
         return res.status(200).json({
-            token: data.session ? data.session.access_token : null,
-            user: data.user
+            user: data.user,
+            session: data.session
         });
     } catch (error) {
-        console.error('Signup error:', error);
-        return res.status(500).json({
-            error: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        console.error('Error in Supabase signup proxy:', error);
+        return res.status(500).json({ error: error.message });
     }
 }

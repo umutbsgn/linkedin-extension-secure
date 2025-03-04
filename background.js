@@ -1,7 +1,8 @@
 import { createClient } from './popup/supabase-client.js';
+import { POSTHOG_API_KEY, POSTHOG_API_HOST } from './popup/analytics.js';
 import { API_ENDPOINTS } from './config.js';
 
-// Implementation of trackEvent for background script using Vercel backend
+// Direct implementation of trackEvent for background script
 async function trackEvent(eventName, properties = {}) {
     // Handle specific event types directly
     if (eventName === 'post_comment' || eventName === 'connection_message') {
@@ -50,23 +51,18 @@ async function trackEvent(eventName, properties = {}) {
 
     // Send to Vercel backend instead of directly to PostHog
     try {
-        // Get the Supabase auth token for authentication
-        const { supabaseAuthToken } = await chrome.storage.local.get('supabaseAuthToken');
-
         fetch(API_ENDPOINTS.TRACK, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': supabaseAuthToken ? `Bearer ${supabaseAuthToken}` : ''
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                event: eventName,
+                eventName: eventName,
                 properties: eventProperties,
-                distinct_id: userEmail || 'anonymous_user',
-                timestamp: new Date().toISOString()
+                distinctId: userEmail || 'anonymous_user' // Use email if available, otherwise anonymous
             })
         }).catch(error => {
-            console.error(`Error sending event to analytics endpoint: ${error}`);
+            console.error(`Error sending event to tracking endpoint: ${error}`);
         });
 
         console.log(`Event tracked via Vercel backend: ${eventName}`, eventProperties);
@@ -75,12 +71,9 @@ async function trackEvent(eventName, properties = {}) {
     }
 }
 
-// Supabase client is only used for authentication
-// All data operations go through the Vercel backend
-const supabase = createClient(
-    'https://fslbhbywcxqmqhwdcgcl.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
-);
+const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const ANTHROPIC_API_KEY = 'anthropicApiKey';
 
@@ -100,21 +93,14 @@ async function callAnthropicAPI(prompt, systemPrompt) {
     });
 
     try {
-        // Get the Supabase auth token
-        const { supabaseAuthToken } = await chrome.storage.local.get('supabaseAuthToken');
-        if (!supabaseAuthToken) {
-            throw new Error('Authentication required. Please log in.');
-        }
-
-        // Call the Vercel backend instead of Anthropic directly
+        // Call the Vercel backend endpoint instead of Anthropic directly
         const response = await fetch(API_ENDPOINTS.ANALYZE, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${supabaseAuthToken}`
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                prompt: prompt,
+                text: prompt,
                 systemPrompt: systemPrompt
             })
         });
@@ -123,7 +109,7 @@ async function callAnthropicAPI(prompt, systemPrompt) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            const errorMessage = errorData.error || response.statusText;
+            const errorMessage = errorData.error && errorData.error.message || response.statusText;
 
             // Track API call failure
             trackEvent('API_Call_Failure', {
@@ -259,25 +245,18 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 async function getCommentSystemPrompt() {
     try {
-        // Get the Supabase auth token
-        const { supabaseAuthToken } = await chrome.storage.local.get('supabaseAuthToken');
-        if (!supabaseAuthToken) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
             throw new Error('No active session');
         }
+        const userId = session.user.id;
+        const { data, error } = await supabase
+            .from('user_settings')
+            .select('system_prompt')
+            .eq('user_id', userId)
+            .single();
 
-        // Get user settings from Vercel backend
-        const response = await fetch(API_ENDPOINTS.USER_SETTINGS, {
-            headers: {
-                'Authorization': `Bearer ${supabaseAuthToken}`
-            }
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Failed to fetch user settings');
-        }
-
-        const data = await response.json();
+        if (error) throw error;
         return data.system_prompt;
     } catch (error) {
         console.error('Error fetching comment system prompt:', error);
@@ -287,28 +266,21 @@ async function getCommentSystemPrompt() {
 
 async function getConnectSystemPrompt() {
     try {
-        // Get the Supabase auth token
-        const { supabaseAuthToken } = await chrome.storage.local.get('supabaseAuthToken');
-        if (!supabaseAuthToken) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
             throw new Error('No active session');
         }
+        const userId = session.user.id;
+        const { data, error } = await supabase
+            .from('user_settings')
+            .select('connect_system_prompt')
+            .eq('user_id', userId)
+            .single();
 
-        // Get user settings from Vercel backend
-        const response = await fetch(API_ENDPOINTS.USER_SETTINGS, {
-            headers: {
-                'Authorization': `Bearer ${supabaseAuthToken}`
-            }
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || 'Failed to fetch user settings');
-        }
-
-        const data = await response.json();
+        if (error) throw error;
 
         if (data && data.connect_system_prompt) {
-            console.log('Retrieved connect system prompt from backend:', data.connect_system_prompt);
+            console.log('Retrieved connect system prompt from Supabase:', data.connect_system_prompt);
             return data.connect_system_prompt;
         } else {
             console.log('No custom connect system prompt found, using default');

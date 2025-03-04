@@ -1,41 +1,63 @@
-import { PostHog } from 'posthog-node';
+// api/analytics/track.js
+// Secure proxy for PostHog analytics tracking
 
 export default async function handler(req, res) {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
+    // Only allow POST requests
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
     try {
-        const { event, properties, distinct_id, timestamp } = req.body;
+        // Get API key from environment variables
+        const posthogApiKey = process.env.POSTHOG_API_KEY;
+        const posthogApiHost = process.env.POSTHOG_API_HOST || 'https://eu.i.posthog.com';
 
-        // Initialize PostHog client
-        const posthog = new PostHog(
-            process.env.POSTHOG_API_KEY, { host: process.env.POSTHOG_API_HOST }
-        );
+        if (!posthogApiKey) {
+            return res.status(500).json({ error: 'PostHog API key not configured on server' });
+        }
 
-        // Send event to PostHog
-        await posthog.capture({
-            distinctId: distinct_id,
-            event: event,
-            properties: properties,
-            timestamp: timestamp
+        // Extract data from request
+        const { eventName, properties, distinctId } = req.body;
+
+        if (!eventName) {
+            return res.status(400).json({ error: 'Missing required parameter: eventName' });
+        }
+
+        // Prepare the tracking payload
+        const payload = {
+            api_key: posthogApiKey,
+            event: eventName,
+            properties: {
+                ...properties,
+                $lib: 'vercel-server',
+                timestamp: properties.timestamp || new Date().toISOString()
+            },
+            distinct_id: distinctId || 'anonymous_user',
+            timestamp: new Date().toISOString()
+        };
+
+        // Call PostHog API
+        const response = await fetch(`${posthogApiHost}/capture/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
         });
 
-        // Flush events before responding
-        await posthog.flush();
+        // Handle API response
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            return res.status(response.status).json({
+                error: `PostHog API call failed: ${response.status} - ${response.statusText}`,
+                details: errorData
+            });
+        }
 
+        // Return successful response
         return res.status(200).json({ success: true });
     } catch (error) {
-        console.error('Analytics error:', error);
+        console.error('Error in PostHog tracking proxy:', error);
         return res.status(500).json({ error: error.message });
     }
 }

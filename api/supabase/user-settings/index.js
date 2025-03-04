@@ -1,173 +1,127 @@
+// api/supabase/user-settings/index.js
+// Secure proxy for user settings operations
+
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-    console.log('User settings API called with method:', req.method);
-
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-
-    // Verify authentication token
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        console.error('Missing or invalid authorization header');
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    console.log('Token received, verifying...');
-
-    // Check environment variables
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
-        console.error('Missing required environment variables:', {
-            SUPABASE_URL_defined: !!process.env.SUPABASE_URL,
-            SUPABASE_SERVICE_KEY_defined: !!process.env.SUPABASE_SERVICE_KEY
-        });
-        return res.status(500).json({
-            error: 'Server configuration error: Missing required environment variables',
-            details: {
-                SUPABASE_URL_defined: !!process.env.SUPABASE_URL,
-                SUPABASE_SERVICE_KEY_defined: !!process.env.SUPABASE_SERVICE_KEY
-            }
-        });
+    // Allow GET, POST, and PATCH requests
+    if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'PATCH') {
+        return res.status(405).json({ error: 'Method not allowed' });
     }
 
     try {
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
         // Initialize Supabase client
-        console.log('Initializing Supabase client...');
-        const supabase = createClient(
-            process.env.SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_KEY
-        );
-        console.log('Supabase client initialized');
+        const supabase = createClient(supabaseUrl, supabaseKey);
 
-        // Verify the token and get user
-        console.log('Verifying token and getting user...');
-        const { data, error: authError } = await supabase.auth.getUser(token);
+        // Get authorization token from request headers
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ error: 'Missing or invalid authorization token' });
+        }
 
-        if (authError) {
-            console.error('Authentication error:', authError);
+        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
             return res.status(401).json({
-                error: 'Invalid authentication token',
-                details: authError.message
+                error: authError ? authError.message : 'Invalid or expired token'
             });
         }
 
-        if (!data || !data.user) {
-            console.error('No user found for token');
-            return res.status(401).json({ error: 'User not found for provided token' });
-        }
+        const userId = user.id;
 
-        const user = data.user;
-        console.log('User authenticated:', user.id);
+        // Handle different request methods
+        if (req.method === 'GET') {
+            // Get user settings
+            const { data, error } = await supabase
+                .from('user_settings')
+                .select('*')
+                .eq('user_id', userId)
+                .single();
 
-        try {
-            if (req.method === 'GET') {
-                console.log('Getting user settings for user:', user.id);
-                // Get user settings
-                const { data, error } = await supabase
-                    .from('user_settings')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .single();
+            if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+                return res.status(500).json({
+                    error: error.message || 'Error fetching user settings'
+                });
+            }
 
-                if (error) {
-                    console.error('Error fetching user settings:', error);
+            return res.status(200).json(data || { user_id: userId });
+        } else if (req.method === 'POST') {
+            // Create new user settings
+            const settingsData = {
+                ...req.body,
+                user_id: userId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
 
-                    // If no settings found, return empty settings instead of 404
-                    if (error.code === 'PGRST116') { // No rows returned
-                        console.log('No settings found, returning empty settings');
-                        return res.status(200).json({
-                            user_id: user.id,
-                            api_key: '',
-                            system_prompt: '',
-                            connect_system_prompt: '',
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        });
-                    }
+            const { data, error } = await supabase
+                .from('user_settings')
+                .insert([settingsData])
+                .select();
 
-                    return res.status(500).json({
-                        error: 'Failed to fetch user settings',
-                        details: error.message,
-                        code: error.code
-                    });
-                }
+            if (error) {
+                return res.status(500).json({
+                    error: error.message || 'Error creating user settings'
+                });
+            }
 
-                console.log('User settings retrieved successfully');
-                return res.status(200).json(data);
-            } else if (req.method === 'POST') {
-                console.log('Saving user settings for user:', user.id);
-                console.log('Settings data:', JSON.stringify(req.body));
+            return res.status(201).json(data[0]);
+        } else if (req.method === 'PATCH') {
+            // Update existing user settings
+            const settingsData = {
+                ...req.body,
+                updated_at: new Date().toISOString()
+            };
 
-                const settingsData = {
-                    ...req.body,
-                    user_id: user.id,
-                    updated_at: new Date().toISOString()
+            const { data, error } = await supabase
+                .from('user_settings')
+                .update(settingsData)
+                .eq('user_id', userId)
+                .select();
+
+            if (error) {
+                return res.status(500).json({
+                    error: error.message || 'Error updating user settings'
+                });
+            }
+
+            // If no rows were updated, try to insert instead
+            if (!data || data.length === 0) {
+                const newSettingsData = {
+                    ...settingsData,
+                    user_id: userId,
+                    created_at: new Date().toISOString()
                 };
 
-                // Try to update first
-                console.log('Attempting to update existing settings...');
-                const { data: updateData, error: updateError } = await supabase
+                const { data: insertData, error: insertError } = await supabase
                     .from('user_settings')
-                    .update(settingsData)
-                    .eq('user_id', user.id);
+                    .insert([newSettingsData])
+                    .select();
 
-                // If no rows were updated, try an insert
-                if (updateError || (updateData && updateData.length === 0)) {
-                    console.log('No rows updated, attempting insert instead');
-
-                    // Add created_at for new records
-                    settingsData.created_at = new Date().toISOString();
-
-                    const { data: insertData, error: insertError } = await supabase
-                        .from('user_settings')
-                        .insert(settingsData);
-
-                    if (insertError) {
-                        console.error('Error inserting user settings:', insertError);
-                        return res.status(500).json({
-                            error: 'Failed to insert user settings',
-                            details: insertError.message,
-                            code: insertError.code
-                        });
-                    }
-
-                    console.log('Settings inserted successfully');
-                    return res.status(201).json(insertData || settingsData);
-                }
-
-                if (updateError) {
-                    console.error('Error updating user settings:', updateError);
+                if (insertError) {
                     return res.status(500).json({
-                        error: 'Failed to update user settings',
-                        details: updateError.message,
-                        code: updateError.code
+                        error: insertError.message || 'Error creating user settings'
                     });
                 }
 
-                console.log('Settings updated successfully');
-                return res.status(200).json(updateData || settingsData);
+                return res.status(201).json(insertData[0]);
             }
-        } catch (error) {
-            console.error('User settings operation error:', error);
-            return res.status(500).json({
-                error: 'Error processing user settings request',
-                details: error.message,
-                stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-            });
+
+            return res.status(200).json(data[0]);
         }
     } catch (error) {
-        console.error('Supabase initialization or authentication error:', error);
-        return res.status(500).json({
-            error: 'Server error during authentication',
-            details: error.message,
-            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        console.error('Error in user settings endpoint:', error);
+        return res.status(500).json({ error: error.message });
     }
 }

@@ -1,168 +1,70 @@
-# LinkedIn Extension Backend
+# Auto LinkedIn Comment AI - Chrome Extension
 
-This is the backend for the LinkedIn AI Assistant browser extension. It provides secure API endpoints for the extension to interact with external services like Anthropic, Supabase, and PostHog.
+A Chrome extension for AI-powered LinkedIn interactions using Claude AI by Anthropic.
 
-## Features
+## Security Enhancements
 
-- Secure API endpoints for Anthropic Claude AI
-- Authentication via Supabase
-- User settings management
-- Beta access control
-- Analytics tracking via PostHog
+This extension has been secured by moving all API keys to a Vercel backend. All API calls are now routed through the Vercel backend, ensuring that sensitive API keys are not exposed in the client-side code.
 
-## Setup
+## Deployment Instructions
 
-### Prerequisites
+### 1. Deploy the Vercel Backend
 
-- Node.js 18+ and npm
-- A Supabase account with a project set up
-- A Vercel account
-- PostHog account (optional for analytics)
+1. Clone this repository
+2. Create a new Vercel project
+3. Deploy the project to Vercel
+4. Set up the following environment variables in your Vercel project settings:
 
-### Local Development
+```
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_key
+POSTHOG_API_KEY=your_posthog_api_key
+POSTHOG_API_HOST=your_posthog_host
+ANTHROPIC_API_KEY=your_anthropic_api_key
+REQUIRE_BETA_ACCESS=true_or_false
+```
 
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/umutbsgn/linkedin-extension-backend.git
-   cd linkedin-extension-backend
-   ```
+### 2. Update the Extension Configuration
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+If you've deployed the Vercel backend to a different URL than the default, update the `VERCEL_BACKEND_URL` in `config.js` to point to your deployed Vercel app URL.
 
-3. Create a `.env` file based on `.env.example`:
-   ```bash
-   cp .env.example .env
-   ```
+## Architecture
 
-4. Fill in the environment variables in the `.env` file:
-   - `SUPABASE_URL`: Your Supabase project URL
-   - `SUPABASE_ANON_KEY`: Your Supabase anon key (from Project Settings > API)
-   - `SUPABASE_SERVICE_KEY`: Your Supabase service role key (from Project Settings > API)
-   - `POSTHOG_API_KEY`: Your PostHog API key
-   - `POSTHOG_API_HOST`: Your PostHog API host (e.g., https://eu.i.posthog.com)
+The extension now uses a secure architecture where all sensitive API calls are routed through a Vercel backend:
 
-5. Run the development server:
-   ```bash
-   npm run dev
-   ```
+1. **Chrome Extension**: The client-side code that runs in the browser
+2. **Vercel Backend**: A serverless backend that handles all API calls to external services
+3. **External APIs**: Anthropic, Supabase, and PostHog
 
-### Supabase Setup
-
-1. Create the following tables in your Supabase project:
-
-   - `user_settings` table:
-     ```sql
-     CREATE TABLE user_settings (
-       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-       user_id UUID REFERENCES auth.users(id) NOT NULL,
-       api_key TEXT,
-       system_prompt TEXT,
-       connect_system_prompt TEXT,
-       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-     );
-     ```
-
-   - `beta_whitelist` table:
-     ```sql
-     CREATE TABLE beta_whitelist (
-       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-       email TEXT UNIQUE NOT NULL,
-       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-     );
-     ```
-
-2. Set up Row Level Security (RLS) policies:
-   ```sql
-   -- For user_settings table
-   ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
-   
-   CREATE POLICY "Users can view their own settings"
-     ON user_settings
-     FOR SELECT
-     USING (auth.uid() = user_id);
-   
-   CREATE POLICY "Users can update their own settings"
-     ON user_settings
-     FOR UPDATE
-     USING (auth.uid() = user_id);
-   
-   CREATE POLICY "Users can insert their own settings"
-     ON user_settings
-     FOR INSERT
-     WITH CHECK (auth.uid() = user_id);
-   ```
-
-## Deployment to Vercel
-
-1. Push your code to GitHub:
-   ```bash
-   git add .
-   git commit -m "Initial commit"
-   git push origin main
-   ```
-
-2. Connect your GitHub repository to Vercel:
-   - Go to [Vercel](https://vercel.com) and sign in
-   - Click "New Project"
-   - Import your GitHub repository
-   - Configure the project:
-     - Framework Preset: Other
-     - Root Directory: ./
-     - Build Command: npm run build (or leave empty)
-     - Output Directory: (leave empty)
-     - Install Command: npm install
-
-3. Add Environment Variables:
-   - Add all the variables from your `.env` file to the Vercel project settings
-   - **IMPORTANT**: Make sure to set the following environment variables correctly:
-     - `SUPABASE_URL`: Your Supabase project URL (e.g., `https://fslbhbywcxqmqhwdcgcl.supabase.co`)
-     - `SUPABASE_ANON_KEY`: Your Supabase anon key (from Project Settings > API)
-     - `SUPABASE_SERVICE_KEY`: Your Supabase service role key (from Project Settings > API)
-     - `POSTHOG_API_KEY`: Your PostHog API key
-     - `POSTHOG_API_HOST`: Your PostHog API host (e.g., `https://eu.i.posthog.com`)
-
-4. Configure Environment Variables in Vercel:
-   - Go to your project in Vercel
-   - Click on "Settings" > "Environment Variables"
-   - Add each variable with its exact name and value
-   - Make sure there are no typos or placeholders in the values
-   - After adding all variables, redeploy your project
-
-5. Deploy:
-   - Click "Deploy"
-   - Wait for the deployment to complete
-   - Your API will be available at the provided Vercel URL
-
-6. Update the extension's config.js:
-   - Set `VERCEL_BACKEND_URL` to your Vercel deployment URL
-
-7. Troubleshooting Environment Variables:
-   - If you encounter "Invalid URL" errors, check that `SUPABASE_URL` is set correctly
-   - Verify that the environment variables are available in the deployed functions
-   - You can check the Vercel logs for any errors related to missing or invalid environment variables
+All API keys are stored securely as environment variables in the Vercel backend, not in the client-side code.
 
 ## API Endpoints
 
-- `POST /api/anthropic/analyze`: Analyze text using Claude AI
-- `POST /api/analytics/track`: Track events in PostHog
-- `POST /api/supabase/auth/login`: Login with Supabase
-- `POST /api/supabase/auth/signup`: Register with Supabase
-- `GET/POST /api/supabase/user-settings`: Get or update user settings
-- `GET /api/supabase/beta-access`: Check if an email has beta access
+The Vercel backend provides the following API endpoints:
 
-## Security
+- `/api/anthropic/analyze`: Proxy for Anthropic API calls
+- `/api/supabase/auth/login`: Handle Supabase login
+- `/api/supabase/auth/signup`: Handle Supabase signup
+- `/api/supabase/user-settings`: Handle user settings operations
+- `/api/supabase/beta-access`: Handle beta access verification
+- `/api/analytics/track`: Handle PostHog analytics tracking
 
-This backend is designed to keep API keys secure by:
+## Development
 
-1. Storing all API keys as environment variables on the server
-2. Authenticating all requests using Supabase JWT tokens
-3. Using server-side API calls to external services
-4. Implementing proper CORS headers
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Create a `.env` file based on `.env.example`
+4. Run the extension locally
 
-## License
+## Building for Production
 
-MIT
+1. Build the extension: `npm run build`
+2. The built extension will be in the `dist` directory
+3. Load the unpacked extension in Chrome from the `dist` directory
+
+## Publishing to Chrome Web Store
+
+1. Create a ZIP file of the `dist` directory
+2. Upload the ZIP file to the Chrome Web Store Developer Dashboard
+3. Submit for review

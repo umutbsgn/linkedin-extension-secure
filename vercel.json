@@ -4,15 +4,10 @@
         { "src": "api/**/*.js", "use": "@vercel/node" }
     ],
     "routes": [
-        { "src": "/api/supabase/auth/login", "dest": "/api/supabase/auth/login.js" },
-        { "src": "/api/supabase/auth/signup", "dest": "/api/supabase/auth/signup.js" },
-        { "src": "/api/supabase/beta-access", "dest": "/api/supabase/beta-access/index.js" },
-        { "src": "/api/supabase/user-settings", "dest": "/api/supabase/user-settings/index.js" },
-        { "src": "/api/analytics/track", "dest": "/api/analytics/track.js" },
-        { "src": "/api/anthropic/analyze", "dest": "/api/anthropic/analyze.js" },
         { "src": "/api/(.*)", "dest": "/api/$1" }
     ],
     "env": {
+        "ANTHROPIC_API_KEY": "@anthropic_api_key",
         "SUPABASE_URL": "@supabase_url",
         "SUPABASE_ANON_KEY": "@supabase_anon_key",
         "SUPABASE_SERVICE_KEY": "@supabase_service_key",
