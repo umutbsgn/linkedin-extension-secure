@@ -43,8 +43,8 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Missing required parameters: email and password' });
         }
 
-        // Check beta access if required
-        if (process.env.REQUIRE_BETA_ACCESS === 'true') {
+        // Always check beta access
+        {
             // Track beta access check
             const betaCheckStartTime = trackApiCallStart('beta_access_check', {
                 email: email

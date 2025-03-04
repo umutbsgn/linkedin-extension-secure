@@ -8,9 +8,12 @@ This extension has been secured by moving all API keys to a Vercel backend. All 
 
 ### Key Security Features
 
-1. **API Key Protection**: All API keys (Anthropic, Supabase, PostHog) are stored securely as environment variables on the Vercel backend.
-2. **Comprehensive Tracking**: All API calls are tracked through PostHog for monitoring and analytics.
-3. **Reduced Permissions**: The extension's permissions have been minimized to only what's necessary.
+1. **API Key Protection**: 
+   - Anthropic API key is retrieved from the user's Supabase settings
+   - Supabase and PostHog API keys are stored securely as environment variables on the Vercel backend
+2. **Comprehensive Tracking**: All API calls are tracked through PostHog for monitoring and analytics
+3. **Beta Access Control**: Beta access is verified directly against the Supabase beta_whitelist table
+4. **Reduced Permissions**: The extension's permissions have been minimized to only what's necessary
 
 ## Deployment Instructions
 
@@ -27,8 +30,6 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_KEY=your_supabase_service_key
 POSTHOG_API_KEY=your_posthog_api_key
 POSTHOG_API_HOST=your_posthog_host
-ANTHROPIC_API_KEY=your_anthropic_api_key
-REQUIRE_BETA_ACCESS=true_or_false
 ```
 
 ### 2. Update the Extension Configuration

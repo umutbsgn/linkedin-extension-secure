@@ -25,17 +25,15 @@ export default async function handler(req, res) {
     }, userId);
 
     try {
-        // Get API key from environment variables
-        const apiKey = process.env.ANTHROPIC_API_KEY;
-        if (!apiKey) {
-            return res.status(500).json({ error: 'API key not configured on server' });
-        }
-
         // Extract data from request
-        const { text, systemPrompt } = req.body;
+        const { text, systemPrompt, apiKey } = req.body;
 
         if (!text) {
             return res.status(400).json({ error: 'Missing required parameter: text' });
+        }
+
+        if (!apiKey) {
+            return res.status(400).json({ error: 'Missing required parameter: apiKey' });
         }
 
         // Call Anthropic API
