@@ -466,103 +466,114 @@ export function aliasUser(newId) {
 // Identify user with Supabase data
 export async function identifyUserWithSupabase(supabase, userId) {
     try {
-        // Get user data from Supabase
-        const { data, error } = await supabase
-            .from('users')
-            .select('email, created_at, last_login, user_metadata')
-            .eq('id', userId)
-            .single();
-
-        if (error) throw error;
-
-        if (data && data.email) {
-            // Store email for future tracking
-            if (data.email && !isBackgroundScript) {
-                window.localStorage.setItem('userEmail', data.email);
-            }
-
-            // Get additional user data if available
-            let additionalData = {};
-            try {
-                const { data: userData, error: userError } = await supabase
-                    .from('user_settings')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .single();
-
-                if (!userError && userData) {
-                    additionalData = userData;
-                }
-            } catch (settingsError) {
-                console.error('Error fetching user settings:', settingsError);
-                // Continue with basic identification even if settings fetch fails
-            }
-
-            // Get usage statistics if available
-            let usageStats = {};
-            try {
-                const { data: activityData, error: activityError } = await supabase
-                    .from('user_activity')
-                    .select('comment_count, connection_count, last_active')
-                    .eq('user_id', userId)
-                    .single();
-
-                if (!activityError && activityData) {
-                    usageStats = activityData;
-                }
-            } catch (activityError) {
-                console.error('Error fetching user activity:', activityError);
-                // Continue with basic identification even if activity fetch fails
-            }
-
-            // Set comprehensive user properties in PostHog
-            const userProperties = {
-                // Standard PostHog properties
-                $email: data.email,
-                email: data.email, // Keep for backward compatibility
-                $name: data.user_metadata ? data.user_metadata.full_name : data.email.split('@')[0],
-                $created: data.created_at,
-
-                // Account information
-                last_login: data.last_login || new Date().toISOString(),
-                supabase_id: userId,
-                account_type: additionalData.account_type || 'standard',
-                api_key_set: !!additionalData.api_key,
-
-                // Usage metrics
-                comment_count: usageStats.comment_count || 0,
-                connection_messages_sent: usageStats.connection_count || 0,
-                last_active: usageStats.last_active || data.last_login || new Date().toISOString(),
-
-                // Device information
-                browser: navigator.userAgent.match(/Chrome|Firefox|Safari|Edge|Opera/) ? navigator.userAgent.match(/Chrome|Firefox|Safari|Edge|Opera/)[0] : 'Unknown',
-                device_type: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
-
-                // Other useful properties
-                email_domain: data.email.split('@')[1],
-
-                // Include any user metadata
-                ...data.user_metadata
-            };
-
-            // Identify user with their email as the distinct ID
-            identifyUser(data.email, userProperties);
-
-            // Also alias the user ID to the email for complete tracking
-            aliasUser(data.email);
-
-            // Set a PostHog event to update person profile
-            trackEvent('Person_Profile_Updated', {
-                email: data.email,
-                update_source: 'login',
-                properties_count: Object.keys(userProperties).length
-            });
-
-            console.log('User identified with email in PostHog:', data.email);
-            return true;
+        // Check if supabase client is properly initialized
+        if (!supabase || !supabase.from || typeof supabase.from !== 'function') {
+            console.error('Supabase client is not properly initialized');
+            return false;
         }
 
-        return false;
+        // Get user data from Supabase
+        try {
+            const { data, error } = await supabase
+                .from('users')
+                .select('email, created_at, last_login, user_metadata')
+                .eq('id', userId)
+                .single();
+
+            if (error) throw error;
+
+            if (data && data.email) {
+                // Store email for future tracking
+                if (data.email && !isBackgroundScript) {
+                    window.localStorage.setItem('userEmail', data.email);
+                }
+
+                // Get additional user data if available
+                let additionalData = {};
+                try {
+                    const { data: userData, error: userError } = await supabase
+                        .from('user_settings')
+                        .select('*')
+                        .eq('user_id', userId)
+                        .single();
+
+                    if (!userError && userData) {
+                        additionalData = userData;
+                    }
+                } catch (settingsError) {
+                    console.error('Error fetching user settings:', settingsError);
+                    // Continue with basic identification even if settings fetch fails
+                }
+
+                // Get usage statistics if available
+                let usageStats = {};
+                try {
+                    const { data: activityData, error: activityError } = await supabase
+                        .from('user_activity')
+                        .select('comment_count, connection_count, last_active')
+                        .eq('user_id', userId)
+                        .single();
+
+                    if (!activityError && activityData) {
+                        usageStats = activityData;
+                    }
+                } catch (activityError) {
+                    console.error('Error fetching user activity:', activityError);
+                    // Continue with basic identification even if activity fetch fails
+                }
+
+                // Set comprehensive user properties in PostHog
+                const userProperties = {
+                    // Standard PostHog properties
+                    $email: data.email,
+                    email: data.email, // Keep for backward compatibility
+                    $name: data.user_metadata ? data.user_metadata.full_name : data.email.split('@')[0],
+                    $created: data.created_at,
+
+                    // Account information
+                    last_login: data.last_login || new Date().toISOString(),
+                    supabase_id: userId,
+                    account_type: additionalData.account_type || 'standard',
+                    api_key_set: !!additionalData.api_key,
+
+                    // Usage metrics
+                    comment_count: usageStats.comment_count || 0,
+                    connection_messages_sent: usageStats.connection_count || 0,
+                    last_active: usageStats.last_active || data.last_login || new Date().toISOString(),
+
+                    // Device information
+                    browser: navigator.userAgent.match(/Chrome|Firefox|Safari|Edge|Opera/) ? navigator.userAgent.match(/Chrome|Firefox|Safari|Edge|Opera/)[0] : 'Unknown',
+                    device_type: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
+
+                    // Other useful properties
+                    email_domain: data.email.split('@')[1],
+
+                    // Include any user metadata
+                    ...data.user_metadata
+                };
+
+                // Identify user with their email as the distinct ID
+                identifyUser(data.email, userProperties);
+
+                // Also alias the user ID to the email for complete tracking
+                aliasUser(data.email);
+
+                // Set a PostHog event to update person profile
+                trackEvent('Person_Profile_Updated', {
+                    email: data.email,
+                    update_source: 'login',
+                    properties_count: Object.keys(userProperties).length
+                });
+
+                console.log('User identified with email in PostHog:', data.email);
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.error('Error identifying user with Supabase:', error);
+            return false;
+        }
     } catch (error) {
         console.error('Error identifying user with Supabase:', error);
         return false;
