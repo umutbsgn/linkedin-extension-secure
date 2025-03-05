@@ -5,6 +5,18 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Parse JSON request bodies
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Add debugging middleware
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    console.log('Headers:', JSON.stringify(req.headers));
+    console.log('Body:', req.body);
+    next();
+});
+
 // Add CORS headers
 app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
