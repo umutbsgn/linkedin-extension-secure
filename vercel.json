@@ -6,6 +6,14 @@
     "routes": [
         { "src": "/api/(.*)", "dest": "/api/$1" }
     ],
+    "headers": [{
+        "source": "/api/(.*)",
+        "headers": [
+            { "key": "Access-Control-Allow-Origin", "value": "*" },
+            { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+            { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+        ]
+    }],
     "env": {
         "SUPABASE_URL": "https://fslbhbywcxqmqhwdcgcl.supabase.co",
         "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM",
