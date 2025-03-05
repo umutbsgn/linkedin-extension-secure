@@ -71,6 +71,38 @@ app.get('/api/config/posthog-host', (req, res) => {
     return res.status(200).json({ host: posthogApiHost });
 });
 
+// Analytics tracking endpoint
+app.post('/api/analytics/track', async(req, res) => {
+    try {
+        const { eventName, properties, distinctId } = req.body;
+
+        if (!eventName) {
+            return res.status(400).json({ error: 'Event name is required' });
+        }
+
+        // Log the event for debugging
+        console.log(`Tracking event: ${eventName}`, {
+            properties,
+            distinctId: distinctId || 'anonymous'
+        });
+
+        // Here you would typically send the event to PostHog
+        // For now, we'll just acknowledge receipt
+
+        return res.status(200).json({
+            success: true,
+            message: 'Event tracked successfully',
+            event: eventName
+        });
+    } catch (error) {
+        console.error('Error tracking event:', error);
+        return res.status(500).json({
+            error: 'Failed to track event',
+            message: error.message
+        });
+    }
+});
+
 // Start server
 if (require.main === module) {
     app.listen(port, () => {

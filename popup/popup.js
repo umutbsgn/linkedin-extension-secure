@@ -196,16 +196,27 @@ document.addEventListener('DOMContentLoaded', async() => {
 
     // Functions
     async function initializeExtension() {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-            showAuthenticatedUI();
-            await loadUserSettings();
+        // Make sure Supabase client is initialized before using it
+        if (!supabase) {
+            supabase = await initSupabase();
+        }
 
-            // Identify user in PostHog with Supabase data
-            await identifyUserWithSupabase(supabase, session.user.id);
-        } else {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                showAuthenticatedUI();
+                await loadUserSettings();
+
+                // Identify user in PostHog with Supabase data
+                await identifyUserWithSupabase(supabase, session.user.id);
+            } else {
+                showUnauthenticatedUI();
+            }
+        } catch (error) {
+            console.error('Error initializing extension:', error);
             showUnauthenticatedUI();
         }
+
         initAnalytics(); // Initialize PostHog
     }
 
