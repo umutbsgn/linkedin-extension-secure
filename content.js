@@ -745,8 +745,8 @@ const ANTHROPIC_API_KEY = 'anthropicApiKey';
 // Function to check if user is authenticated
 async function isUserAuthenticated() {
     try {
-        const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'supabaseAuthToken']);
-        return !!(result[ANTHROPIC_API_KEY] && result.supabaseAuthToken);
+        const result = await chrome.storage.local.get(['supabaseAuthToken']);
+        return !!result.supabaseAuthToken;
     } catch (error) {
         console.error('Error checking authentication status:', error);
         return false;
