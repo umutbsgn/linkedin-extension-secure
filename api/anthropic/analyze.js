@@ -60,22 +60,16 @@ export default async function handler(req, res) {
 
         userId = user.id; // Update userId with actual user ID
 
-        // Get user settings including API key
-        const { data: userSettings, error: settingsError } = await supabase
-            .from('user_settings')
-            .select('api_key')
-            .eq('user_id', userId)
-            .single();
+        // Use the API key from environment variable instead of user settings
+        const apiKey = process.env.ANTHROPIC_API_KEY;
 
-        if (settingsError || !userSettings || !userSettings.api_key) {
+        if (!apiKey) {
             trackApiCallFailure('anthropic_messages', startTime,
-                settingsError ? settingsError.message : 'API key not found in user settings', {}, user.email || userId);
-            return res.status(400).json({
-                error: 'API key not found in user settings. Please add your Anthropic API key in the extension settings.'
+                'Anthropic API key not configured on server', {}, user.email || userId);
+            return res.status(500).json({
+                error: 'Anthropic API key not configured on server'
             });
         }
-
-        const apiKey = userSettings.api_key;
 
         // Extract data from request
         const { text, systemPrompt } = req.body;
