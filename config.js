@@ -6,6 +6,9 @@ export const VERCEL_BACKEND_URL = 'https://linkedin-extension-secure-elew.vercel
 
 // API endpoints
 export const API_ENDPOINTS = {
+    // Base URL
+    VERCEL_BACKEND_URL: VERCEL_BACKEND_URL,
+
     // Anthropic
     ANALYZE: `${VERCEL_BACKEND_URL}/api/anthropic/analyze`,
 
@@ -16,6 +19,9 @@ export const API_ENDPOINTS = {
     // Supabase Data
     USER_SETTINGS: `${VERCEL_BACKEND_URL}/api/supabase/user-settings`,
     BETA_ACCESS: `${VERCEL_BACKEND_URL}/api/supabase/beta-access`,
+
+    // API Usage
+    USAGE: `${VERCEL_BACKEND_URL}/api/usage`,
 
     // Analytics
     TRACK: `${VERCEL_BACKEND_URL}/api/analytics/track`,
