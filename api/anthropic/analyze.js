@@ -3,6 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
+import { checkAndUpdateApiUsage } from '../utils/usage.js';
 
 export default async function handler(req, res) {
     // Add CORS headers
@@ -59,6 +60,24 @@ export default async function handler(req, res) {
         }
 
         userId = user.id; // Update userId with actual user ID
+
+        // Check and update API usage
+        const { data: usageData, error: usageError } = await checkAndUpdateApiUsage(supabase, userId);
+
+        if (usageError) {
+            trackApiCallFailure('anthropic_messages', startTime, 'Error checking API usage', {}, user.email || userId);
+            return res.status(500).json({ error: 'Error checking API usage' });
+        }
+
+        if (!usageData.hasRemainingCalls) {
+            trackApiCallFailure('anthropic_messages', startTime, 'API call limit reached', {}, user.email || userId);
+            return res.status(403).json({
+                error: 'Monthly API call limit reached',
+                limit: 50,
+                used: usageData.callsCount,
+                resetDate: usageData.nextResetDate
+            });
+        }
 
         // Use the API key from environment variable instead of user settings
         const apiKey = process.env.ANTHROPIC_API_KEY;

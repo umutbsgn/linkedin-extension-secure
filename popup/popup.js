@@ -189,6 +189,82 @@ document.addEventListener('DOMContentLoaded', async() => {
     }
 
     // Functions
+
+    // Function to load API usage data
+    async function loadApiUsage() {
+        try {
+            // Check if Supabase client is initialized
+            if (!supabase) {
+                console.error('Cannot load API usage: Supabase client not initialized');
+                return null;
+            }
+
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError || !session) {
+                console.error('Error getting user session:', sessionError);
+                return null;
+            }
+
+            const result = await chrome.storage.local.get('supabaseAuthToken');
+            const token = result.supabaseAuthToken || session.access_token;
+
+            if (!token) {
+                console.error('No auth token available');
+                return null;
+            }
+
+            const response = await fetch(`${API_ENDPOINTS.VERCEL_BACKEND_URL}/api/usage`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch API usage:', response.status, response.statusText);
+                return null;
+            }
+
+            return await response.json();
+        } catch (error) {
+            console.error('Error loading API usage:', error);
+            return null;
+        }
+    }
+
+    // Function to update the UI with API usage data
+    function updateApiUsageUI(usageData) {
+        const apiUsageElement = document.getElementById('apiUsage');
+        if (!apiUsageElement) return;
+
+        if (!usageData) {
+            apiUsageElement.innerHTML = '<div class="loading-message">API usage data not available</div>';
+            return;
+        }
+
+        const { callsCount, limit, hasRemainingCalls, nextResetDate } = usageData;
+        const remaining = Math.max(0, limit - callsCount);
+        const usagePercentage = (callsCount / limit) * 100;
+        const resetDate = new Date(nextResetDate).toLocaleDateString();
+
+        // Determine color class based on remaining percentage
+        let colorClass = '';
+        if (remaining / limit < 0.1) {
+            colorClass = 'low';
+        } else if (remaining / limit < 0.3) {
+            colorClass = 'medium';
+        }
+
+        apiUsageElement.innerHTML = `
+            <div class="usage-bar">
+                <div class="usage-progress ${colorClass}" style="width: ${usagePercentage}%"></div>
+            </div>
+            <div class="usage-text">
+                <span>${remaining} of ${limit} API calls remaining</span>
+                <span class="usage-reset">Resets on: ${resetDate}</span>
+            </div>
+        `;
+    }
+
     async function initializeExtension() {
         // Make sure Supabase client is initialized before using it
         if (!supabase) {
@@ -209,6 +285,10 @@ document.addEventListener('DOMContentLoaded', async() => {
             if (session) {
                 showAuthenticatedUI();
                 await loadUserSettings();
+
+                // Load and display API usage
+                const usageData = await loadApiUsage();
+                updateApiUsageUI(usageData);
 
                 // Identify user in PostHog with Supabase data
                 await identifyUserWithSupabase(supabase, session.user.id);
@@ -465,6 +545,10 @@ document.addEventListener('DOMContentLoaded', async() => {
             if (response.success) {
                 responseDiv.textContent = response.data.content[0].text;
 
+                // Refresh API usage display after successful API call
+                const usageData = await loadApiUsage();
+                updateApiUsageUI(usageData);
+
                 // Track analyze text success
                 trackEvent('Analyze_Text_Success', {
                     prompt_length: prompt.length,
@@ -472,7 +556,17 @@ document.addEventListener('DOMContentLoaded', async() => {
                     duration_ms: Date.now() - startTime
                 });
             } else {
-                throw new Error(response.error);
+                // Check if the error is related to API usage limits
+                if (response.error && response.error.includes('Monthly API call limit reached')) {
+                    // Show a more user-friendly message
+                    showStatus('You have reached your monthly API call limit. Please try again next month.', 'error');
+
+                    // Refresh API usage display
+                    const usageData = await loadApiUsage();
+                    updateApiUsageUI(usageData);
+                } else {
+                    throw new Error(response.error);
+                }
             }
         } catch (error) {
             showStatus(`Error: ${error.message}`, 'error');
