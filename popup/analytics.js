@@ -15,9 +15,7 @@ async function initPostHogConfig() {
 
         if (!keyResponse.ok || !hostResponse.ok) {
             console.error('Failed to fetch PostHog configuration');
-            // Use default values as fallback
-            POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
-            POSTHOG_API_HOST = 'https://eu.i.posthog.com';
+            // Don't set default values, tracking will be disabled
             return;
         }
 
@@ -30,9 +28,7 @@ async function initPostHogConfig() {
         console.log('PostHog configuration initialized');
     } catch (error) {
         console.error('Error initializing PostHog configuration:', error);
-        // Use default values as fallback
-        POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
-        POSTHOG_API_HOST = 'https://eu.i.posthog.com';
+        // Don't set default values, tracking will be disabled
     }
 }
 

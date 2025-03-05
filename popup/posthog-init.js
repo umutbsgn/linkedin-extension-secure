@@ -16,10 +16,8 @@ async function initPostHogConfig() {
 
         if (!keyResponse.ok || !hostResponse.ok) {
             console.error('Failed to fetch PostHog configuration');
-            // Use default values as fallback
-            POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
-            POSTHOG_API_HOST = 'https://eu.i.posthog.com';
-            return;
+            // Don't set default values, tracking will be disabled
+            return false;
         }
 
         const { key } = await keyResponse.json();
@@ -29,11 +27,11 @@ async function initPostHogConfig() {
         POSTHOG_API_HOST = host;
 
         console.log('PostHog configuration initialized');
+        return true;
     } catch (error) {
         console.error('Error initializing PostHog configuration:', error);
-        // Use default values as fallback
-        POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
-        POSTHOG_API_HOST = 'https://eu.i.posthog.com';
+        // Don't set default values, tracking will be disabled
+        return false;
     }
 }
 
@@ -44,20 +42,24 @@ export async function initPostHog() {
     }
 
     // Initialize PostHog configuration
-    await initPostHogConfig();
+    const configLoaded = await initPostHogConfig();
 
-    try {
-        posthog.init(POSTHOG_API_KEY, {
-            api_host: POSTHOG_API_HOST,
-            person_profiles: 'identified_only',
-            loaded: function(posthog) {
-                console.log('PostHog loaded successfully');
-            },
-        });
+    // Only initialize PostHog if configuration was loaded successfully
+    if (configLoaded && POSTHOG_API_KEY && POSTHOG_API_HOST) {
+        try {
+            posthog.init(POSTHOG_API_KEY, {
+                api_host: POSTHOG_API_HOST,
+                person_profiles: 'identified_only',
+                loaded: function(posthog) {
+                    console.log('PostHog loaded successfully');
+                },
+            });
 
-        console.log('PostHog initialized with API Key:', POSTHOG_API_KEY);
-        console.log('PostHog API Host:', POSTHOG_API_HOST);
-    } catch (error) {
-        console.error('Error initializing PostHog:', error);
+            console.log('PostHog initialized successfully');
+        } catch (error) {
+            console.error('Error initializing PostHog:', error);
+        }
+    } else {
+        console.warn('PostHog initialization skipped: Configuration not available');
     }
 }

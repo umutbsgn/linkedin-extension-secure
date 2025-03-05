@@ -12,11 +12,8 @@ async function initSupabase() {
 
         if (!urlResponse.ok || !keyResponse.ok) {
             console.error('Failed to fetch Supabase configuration');
-            // Fallback to hardcoded values temporarily
-            return createClient(
-                'https://fslbhbywcxqmqhwdcgcl.supabase.co',
-                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
-            );
+            // Return null instead of using hardcoded values
+            return null;
         }
 
         const { url } = await urlResponse.json();
@@ -25,11 +22,8 @@ async function initSupabase() {
         return createClient(url, key);
     } catch (error) {
         console.error('Error initializing Supabase:', error);
-        // Fallback to hardcoded values temporarily
-        return createClient(
-            'https://fslbhbywcxqmqhwdcgcl.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
-        );
+        // Return null instead of using hardcoded values
+        return null;
     }
 }
 

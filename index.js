@@ -98,8 +98,47 @@ app.post('/api/analytics/track', async(req, res) => {
             distinctId: distinctId || 'anonymous'
         });
 
-        // Here you would typically send the event to PostHog
-        // For now, we'll just acknowledge receipt
+        // Get PostHog configuration from environment variables
+        const posthogApiKey = process.env.POSTHOG_API_KEY;
+        const posthogApiHost = process.env.POSTHOG_API_HOST || 'https://eu.i.posthog.com';
+
+        if (!posthogApiKey) {
+            console.error('PostHog API key not configured');
+            // Still return success to avoid breaking client functionality
+            return res.status(200).json({
+                success: true,
+                message: 'Event acknowledged but not tracked (PostHog not configured)',
+                event: eventName
+            });
+        }
+
+        // Send the event to PostHog
+        try {
+            const response = await fetch(`${posthogApiHost}/capture/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    api_key: posthogApiKey,
+                    event: eventName,
+                    properties: {
+                        ...properties,
+                        source: 'vercel_backend',
+                        timestamp: new Date().toISOString()
+                    },
+                    distinct_id: distinctId || 'anonymous_user',
+                    timestamp: new Date().toISOString()
+                })
+            });
+
+            if (!response.ok) {
+                console.error(`Error sending event to PostHog: ${response.status} ${response.statusText}`);
+            } else {
+                console.log(`Event successfully sent to PostHog: ${eventName}`);
+            }
+        } catch (posthogError) {
+            console.error('Error sending event to PostHog:', posthogError);
+            // Still return success to avoid breaking client functionality
+        }
 
         return res.status(200).json({
             success: true,

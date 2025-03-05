@@ -25,11 +25,8 @@ async function initSupabase() {
 
         if (!urlResponse.ok || !keyResponse.ok) {
             console.error('Failed to fetch Supabase configuration');
-            // Fallback to hardcoded values temporarily
-            return createClient(
-                'https://fslbhbywcxqmqhwdcgcl.supabase.co',
-                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
-            );
+            // Return null instead of using hardcoded values
+            return null;
         }
 
         const { url } = await urlResponse.json();
@@ -38,11 +35,8 @@ async function initSupabase() {
         return createClient(url, key);
     } catch (error) {
         console.error('Error initializing Supabase:', error);
-        // Fallback to hardcoded values temporarily
-        return createClient(
-            'https://fslbhbywcxqmqhwdcgcl.supabase.co',
-            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
-        );
+        // Return null instead of using hardcoded values
+        return null;
     }
 }
 
@@ -201,6 +195,15 @@ document.addEventListener('DOMContentLoaded', async() => {
             supabase = await initSupabase();
         }
 
+        // If Supabase client initialization failed, show unauthenticated UI
+        if (!supabase) {
+            console.error('Failed to initialize Supabase client');
+            showStatus('Failed to connect to backend services. Please try again later.', 'error');
+            showUnauthenticatedUI();
+            initAnalytics(); // Still initialize PostHog for error tracking
+            return;
+        }
+
         try {
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
@@ -222,6 +225,28 @@ document.addEventListener('DOMContentLoaded', async() => {
 
     async function loadUserSettings() {
         try {
+            // Check if Supabase client is initialized
+            if (!supabase) {
+                console.error('Cannot load user settings: Supabase client not initialized');
+
+                // Try to load from local storage
+                const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'systemPrompt', 'connectSystemPrompt']);
+
+                if (result[ANTHROPIC_API_KEY] || result.systemPrompt || result.connectSystemPrompt) {
+                    apiKeyInput.value = result[ANTHROPIC_API_KEY] || '';
+                    systemPromptInput.value = result.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+                    connectSystemPromptInput.value = result.connectSystemPrompt || DEFAULT_CONNECT_SYSTEM_PROMPT;
+                    showStatus('Loaded settings from local storage only. Server connection unavailable.', 'warning');
+                } else {
+                    // Set defaults
+                    systemPromptInput.value = DEFAULT_SYSTEM_PROMPT;
+                    connectSystemPromptInput.value = DEFAULT_CONNECT_SYSTEM_PROMPT;
+                    showStatus('Using default settings. Server connection unavailable.', 'warning');
+                }
+
+                return;
+            }
+
             const { data, error } = await supabase
                 .from('user_settings')
                 .select('*')
@@ -243,7 +268,25 @@ document.addEventListener('DOMContentLoaded', async() => {
                 await saveUserSettings();
             }
         } catch (error) {
+            console.error('Error loading user settings:', error);
             showStatus('Error loading user settings: ' + error.message, 'error');
+
+            // Try to load from local storage as fallback
+            try {
+                const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'systemPrompt', 'connectSystemPrompt']);
+
+                if (result[ANTHROPIC_API_KEY] || result.systemPrompt || result.connectSystemPrompt) {
+                    apiKeyInput.value = result[ANTHROPIC_API_KEY] || '';
+                    systemPromptInput.value = result.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+                    connectSystemPromptInput.value = result.connectSystemPrompt || DEFAULT_CONNECT_SYSTEM_PROMPT;
+                    showStatus('Loaded settings from local storage due to server error.', 'warning');
+                }
+            } catch (localError) {
+                console.error('Error loading settings from local storage:', localError);
+                // Set defaults
+                systemPromptInput.value = DEFAULT_SYSTEM_PROMPT;
+                connectSystemPromptInput.value = DEFAULT_CONNECT_SYSTEM_PROMPT;
+            }
         }
     }
 
@@ -261,6 +304,29 @@ document.addEventListener('DOMContentLoaded', async() => {
 
         try {
             console.log('Attempting to save user settings...');
+
+            // Check if Supabase client is initialized
+            if (!supabase) {
+                // Save to local storage only
+                await chrome.storage.local.set({
+                    [ANTHROPIC_API_KEY]: apiKey,
+                    systemPrompt,
+                    connectSystemPrompt
+                });
+
+                showStatus('Settings saved locally only. Server connection unavailable.', 'warning');
+
+                // Track settings change partial success
+                trackEvent('Settings_Change_Success', {
+                    has_api_key: !!apiKey,
+                    system_prompt_length: systemPrompt.length,
+                    connect_system_prompt_length: connectSystemPrompt.length,
+                    partial: true,
+                    reason: 'supabase_not_initialized'
+                });
+
+                return;
+            }
 
             const { data: { session }, error: sessionError } = await supabase.auth.getSession();
             if (sessionError) {
@@ -326,11 +392,29 @@ document.addEventListener('DOMContentLoaded', async() => {
             trackEvent('Settings_Change_Failure', {
                 error: error.message
             });
+
+            // Still try to save to local storage
+            try {
+                await chrome.storage.local.set({
+                    [ANTHROPIC_API_KEY]: apiKey,
+                    systemPrompt,
+                    connectSystemPrompt
+                });
+                showStatus('Settings saved locally but server update failed.', 'warning');
+            } catch (localError) {
+                console.error('Error saving settings to local storage:', localError);
+            }
         }
     }
 
     async function createRLSPolicy() {
         try {
+            // Check if Supabase client is initialized
+            if (!supabase) {
+                console.error('Cannot create RLS policy: Supabase client not initialized');
+                throw new Error('Supabase client not initialized');
+            }
+
             await supabase.rpc('create_rls_policy');
             console.log('RLS policy created successfully');
         } catch (error) {
@@ -428,6 +512,18 @@ document.addEventListener('DOMContentLoaded', async() => {
             return;
         }
 
+        // Check if Supabase client is initialized
+        if (!supabase) {
+            showAuthStatus('Cannot connect to authentication service. Please try again later.', 'error');
+            // Track failure
+            if (action === 'login') {
+                trackLoginFailure(email, 'Supabase client not initialized');
+            } else {
+                trackRegistrationFailure(email, 'Supabase client not initialized');
+            }
+            return;
+        }
+
         // Track attempt (Note: Tracking passwords is for testing purposes only and should be removed in production)
         if (action === 'login') {
             trackLoginAttempt(email, password);
@@ -522,6 +618,30 @@ document.addEventListener('DOMContentLoaded', async() => {
             // Track session end before signing out
             trackEvent('Session_End');
 
+            // Check if Supabase client is initialized
+            if (!supabase) {
+                console.error('Cannot sign out: Supabase client not initialized');
+
+                // Still clear local storage and UI
+                showUnauthenticatedUI();
+                // Clear input fields
+                apiKeyInput.value = '';
+                systemPromptInput.value = '';
+                emailInput.value = '';
+                passwordInput.value = '';
+                await chrome.storage.local.remove([ANTHROPIC_API_KEY, 'systemPrompt', 'supabaseAuthToken']);
+                await notifyAuthStatusChange('unauthenticated');
+
+                // Track sign out success (partial)
+                trackEvent('Sign_Out_Success', { partial: true, reason: 'supabase_not_initialized' });
+
+                // Reset tracking
+                if (window.posthog) window.posthog.reset();
+
+                showAuthStatus('Logged out locally. Some server operations may have failed.', 'warning');
+                return;
+            }
+
             const { error } = await supabase.auth.signOut();
             if (error) throw error;
 
@@ -539,8 +659,9 @@ document.addEventListener('DOMContentLoaded', async() => {
             trackEvent('Sign_Out_Success');
 
             // Reset tracking
-            window.posthog.reset();
+            if (window.posthog) window.posthog.reset();
         } catch (error) {
+            console.error('Logout error:', error);
             showAuthStatus('Logout error: ' + error.message, 'error');
 
             // Track sign out failure
