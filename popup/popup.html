@@ -138,14 +138,9 @@
 
 
     <script src="../lib/posthog/posthog.js"></script>
+    <script src="posthog-init-inline.js"></script>
     <script type="module" src="analytics.js"></script>
     <script type="module" src="popup.js"></script>
-    <script>
-        // Initialize PostHog
-        window.posthog = window.posthog || function() {
-            (window.posthog.q = window.posthog.q || []).push(arguments)
-        };
-    </script>
 </body>
 
 </html>

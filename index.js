@@ -34,6 +34,43 @@ app.get('/api/healthcheck', (req, res) => {
     });
 });
 
+// Configuration endpoints
+// Supabase URL
+app.get('/api/config/supabase-url', (req, res) => {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    if (!supabaseUrl) {
+        return res.status(500).json({ error: 'Supabase URL not configured' });
+    }
+    return res.status(200).json({ url: supabaseUrl });
+});
+
+// Supabase Key
+app.get('/api/config/supabase-key', (req, res) => {
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
+    if (!supabaseKey) {
+        return res.status(500).json({ error: 'Supabase anon key not configured' });
+    }
+    return res.status(200).json({ key: supabaseKey });
+});
+
+// PostHog API Key
+app.get('/api/config/posthog-key', (req, res) => {
+    const posthogApiKey = process.env.POSTHOG_API_KEY;
+    if (!posthogApiKey) {
+        return res.status(500).json({ error: 'PostHog API key not configured' });
+    }
+    return res.status(200).json({ key: posthogApiKey });
+});
+
+// PostHog API Host
+app.get('/api/config/posthog-host', (req, res) => {
+    const posthogApiHost = process.env.POSTHOG_API_HOST;
+    if (!posthogApiHost) {
+        return res.status(500).json({ error: 'PostHog API host not configured' });
+    }
+    return res.status(200).json({ host: posthogApiHost });
+});
+
 // Start server
 if (require.main === module) {
     app.listen(port, () => {
