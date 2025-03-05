@@ -1,6 +1,59 @@
 import { createClient } from './popup/supabase-client.js';
-import { POSTHOG_API_KEY, POSTHOG_API_HOST } from './popup/analytics.js';
 import { API_ENDPOINTS } from './config.js';
+
+// Initialize Supabase client with async function
+let supabase = null;
+
+async function initSupabase() {
+    try {
+        // Fetch Supabase URL and key from Vercel backend
+        const urlResponse = await fetch(API_ENDPOINTS.SUPABASE_URL);
+        const keyResponse = await fetch(API_ENDPOINTS.SUPABASE_KEY);
+
+        if (!urlResponse.ok || !keyResponse.ok) {
+            console.error('Failed to fetch Supabase configuration');
+            // Fallback to hardcoded values temporarily
+            return createClient(
+                'https://fslbhbywcxqmqhwdcgcl.supabase.co',
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
+            );
+        }
+
+        const { url } = await urlResponse.json();
+        const { key } = await keyResponse.json();
+
+        return createClient(url, key);
+    } catch (error) {
+        console.error('Error initializing Supabase:', error);
+        // Fallback to hardcoded values temporarily
+        return createClient(
+            'https://fslbhbywcxqmqhwdcgcl.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
+        );
+    }
+}
+
+// Initialize Supabase on load
+initSupabase().then(client => {
+    supabase = client;
+    console.log('Supabase client initialized');
+
+    // Initialize session after Supabase is ready
+    if (supabase) {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) {
+                chrome.storage.local.set({ supabaseAuthToken: session.access_token });
+            }
+        });
+    }
+});
+
+const ANTHROPIC_API_KEY = 'anthropicApiKey';
+
+async function getApiKey() {
+    const result = await chrome.storage.local.get(ANTHROPIC_API_KEY);
+    return result[ANTHROPIC_API_KEY];
+}
 
 // Direct implementation of trackEvent for background script
 async function trackEvent(eventName, properties = {}) {
@@ -40,10 +93,12 @@ async function trackEvent(eventName, properties = {}) {
     // Try to get the user's email from Supabase to use as distinct_id
     let userEmail = null;
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session && session.user) {
-            userEmail = session.user.email;
-            console.log('Using user email for tracking:', userEmail);
+        if (supabase) {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session && session.user) {
+                userEmail = session.user.email;
+                console.log('Using user email for tracking:', userEmail);
+            }
         }
     } catch (error) {
         console.error('Error getting user email:', error);
@@ -69,17 +124,6 @@ async function trackEvent(eventName, properties = {}) {
     } catch (error) {
         console.error(`Error tracking event ${eventName}:`, error);
     }
-}
-
-const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const ANTHROPIC_API_KEY = 'anthropicApiKey';
-
-async function getApiKey() {
-    const result = await chrome.storage.local.get(ANTHROPIC_API_KEY);
-    return result[ANTHROPIC_API_KEY];
 }
 
 async function callAnthropicAPI(prompt, systemPrompt) {
@@ -250,10 +294,28 @@ chrome.runtime.onInstalled.addListener((details) => {
             current_version: chrome.runtime.getManifest().version
         });
     }
+
+    // Initialize Supabase session
+    initSupabase().then(client => {
+        if (client) {
+            client.auth.getSession().then(({ data: { session } }) => {
+                if (session) {
+                    chrome.storage.local.set({ supabaseAuthToken: session.access_token });
+                }
+            });
+        }
+    });
+
+    // Migrate old API key
+    migrateOldApiKey();
 });
 
 async function getCommentSystemPrompt() {
     try {
+        if (!supabase) {
+            throw new Error('Supabase client not initialized');
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
             throw new Error('No active session');
@@ -275,6 +337,10 @@ async function getCommentSystemPrompt() {
 
 async function getConnectSystemPrompt() {
     try {
+        if (!supabase) {
+            throw new Error('Supabase client not initialized');
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) {
             throw new Error('No active session');
@@ -301,16 +367,6 @@ async function getConnectSystemPrompt() {
         return DEFAULT_CONNECT_SYSTEM_PROMPT;
     }
 }
-
-// Initialize Supabase session and migrate old API key
-chrome.runtime.onInstalled.addListener(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-            chrome.storage.local.set({ supabaseAuthToken: session.access_token });
-        }
-    });
-    migrateOldApiKey();
-});
 
 async function migrateOldApiKey() {
     const result = await chrome.storage.local.get(['apiKey', ANTHROPIC_API_KEY]);

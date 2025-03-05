@@ -18,5 +18,13 @@ export const API_ENDPOINTS = {
     BETA_ACCESS: `${VERCEL_BACKEND_URL}/api/supabase/beta-access`,
 
     // Analytics
-    TRACK: `${VERCEL_BACKEND_URL}/api/analytics/track`
+    TRACK: `${VERCEL_BACKEND_URL}/api/analytics/track`,
+
+    // Supabase Configuration (these will be accessed via Vercel backend)
+    SUPABASE_URL: `${VERCEL_BACKEND_URL}/api/config/supabase-url`,
+    SUPABASE_KEY: `${VERCEL_BACKEND_URL}/api/config/supabase-key`,
+
+    // PostHog Configuration (these will be accessed via Vercel backend)
+    POSTHOG_API_KEY: `${VERCEL_BACKEND_URL}/api/config/posthog-key`,
+    POSTHOG_API_HOST: `${VERCEL_BACKEND_URL}/api/config/posthog-host`
 };

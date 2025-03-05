@@ -1,5 +1,6 @@
 import { createClient } from './supabase-client.js';
 import { checkBetaAccess } from './beta-validator.js';
+import { API_ENDPOINTS } from '../config.js';
 import {
     initAnalytics,
     trackEvent,
@@ -13,9 +14,43 @@ import {
     identifyUserWithSupabase
 } from './analytics.js';
 
-const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Supabase client with async function
+let supabase = null;
+
+async function initSupabase() {
+    try {
+        // Fetch Supabase URL and key from Vercel backend
+        const urlResponse = await fetch(API_ENDPOINTS.SUPABASE_URL);
+        const keyResponse = await fetch(API_ENDPOINTS.SUPABASE_KEY);
+
+        if (!urlResponse.ok || !keyResponse.ok) {
+            console.error('Failed to fetch Supabase configuration');
+            // Fallback to hardcoded values temporarily
+            return createClient(
+                'https://fslbhbywcxqmqhwdcgcl.supabase.co',
+                'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
+            );
+        }
+
+        const { url } = await urlResponse.json();
+        const { key } = await keyResponse.json();
+
+        return createClient(url, key);
+    } catch (error) {
+        console.error('Error initializing Supabase:', error);
+        // Fallback to hardcoded values temporarily
+        return createClient(
+            'https://fslbhbywcxqmqhwdcgcl.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM'
+        );
+    }
+}
+
+// Initialize Supabase client
+initSupabase().then(client => {
+    supabase = client;
+    console.log('Supabase client initialized');
+});
 
 // Listen for messages from background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
