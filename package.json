@@ -6,11 +6,12 @@
     "scripts": {
         "dev": "vercel dev",
         "deploy": "vercel deploy --prod",
-        "start": "vercel dev"
+        "start": "node index.js"
     },
     "dependencies": {
         "@supabase/supabase-js": "^2.38.0",
-        "axios": "^1.5.0"
+        "axios": "^1.5.0",
+        "express": "^4.18.2"
     },
     "devDependencies": {
         "vercel": "^32.3.0"
