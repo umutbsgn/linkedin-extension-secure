@@ -87,10 +87,27 @@ export default async function handler(req, res) {
             });
         }
 
+        // Create a trial subscription for the new user
+        const { error: subscriptionError } = await supabase
+            .from('user_subscriptions')
+            .insert([{
+                user_id: data.user.id,
+                subscription_type: 'trial',
+                status: 'active',
+                current_period_start: new Date().toISOString(),
+                current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 days trial
+            }]);
+
+        if (subscriptionError) {
+            console.error('Error creating trial subscription:', subscriptionError);
+            // Continue despite error - we don't want to fail registration if subscription creation fails
+        }
+
         // Track successful registration
         trackApiCallSuccess('supabase_signup', startTime, {
             user_id: data.user.id,
-            has_session: !!data.session
+            has_session: !!data.session,
+            trial_subscription_created: !subscriptionError
         }, email);
 
         // Return successful response with user data

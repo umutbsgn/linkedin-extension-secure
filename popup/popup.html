@@ -32,21 +32,21 @@
                     </div>
                     <div class="button-group">
                         <button type="button" id="loginButton" class="primary-button">
-              <span class="button-icon">🔐</span>
-              Login
-            </button>
+                            <span class="button-icon">🔐</span>
+                            Login
+                        </button>
                         <button type="button" id="registerButton" class="primary-button">
-              <span class="button-icon">📝</span>
-              Register
-            </button>
+                            <span class="button-icon">📝</span>
+                            Register
+                        </button>
                     </div>
                 </form>
                 <div class="authenticated" style="display: none;">
                     <p>You are logged in.</p>
                     <button id="signOutButton" class="primary-button">
-            <span class="button-icon">🚪</span>
-            Sign Out
-          </button>
+                        <span class="button-icon">🚪</span>
+                        Sign Out
+                    </button>
                 </div>
                 <div id="authStatus" class="status-message"></div>
             </div>
@@ -63,13 +63,13 @@
                     <div class="api-key-input">
                         <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
                         <button id="showApiKey" class="icon-button" title="Show/Hide API Key">
-              <span class="button-icon">👁️</span>
-            </button>
+                            <span class="button-icon">👁️</span>
+                        </button>
                     </div>
                     <button id="saveApiKey" class="primary-button">
-            <span class="button-icon">💾</span>
-            Save API Key
-          </button>
+                        <span class="button-icon">💾</span>
+                        Save API Key
+                    </button>
                 </div>
                 <div id="apiKeyStatus" class="status-message"></div>
             </div>
@@ -83,6 +83,12 @@
             <div class="card-content">
                 <div id="apiUsage" class="api-usage-container">
                     <div class="loading-message">Loading API usage data...</div>
+                </div>
+                <div class="model-usage-container" style="display: none;">
+                    <h3>Model Usage</h3>
+                    <div id="modelUsage">
+                        <div class="loading-message">Loading model usage data...</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -104,12 +110,12 @@
                             <textarea id="systemPrompt" class="system-prompt" placeholder="Enter the system prompt for Posts here..."></textarea>
                             <div class="button-group">
                                 <button id="resetPrompt" class="icon-button" title="Reset to Default">
-                  <span class="button-icon">🔄</span>
-                </button>
+                                    <span class="button-icon">🔄</span>
+                                </button>
                                 <button id="savePrompt" class="primary-button">
-                  <span class="button-icon">💾</span>
-                  Save
-                </button>
+                                    <span class="button-icon">💾</span>
+                                    Save
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -119,12 +125,12 @@
                             <textarea id="connectSystemPrompt" class="system-prompt" placeholder="Enter the system prompt for Connect here..."></textarea>
                             <div class="button-group">
                                 <button id="resetConnectPrompt" class="icon-button" title="Reset to Default">
-                  <span class="button-icon">🔄</span>
-                </button>
+                                    <span class="button-icon">🔄</span>
+                                </button>
                                 <button id="saveConnectPrompt" class="primary-button">
-                  <span class="button-icon">💾</span>
-                  Save
-                </button>
+                                    <span class="button-icon">💾</span>
+                                    Save
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -138,16 +144,37 @@
                 <span class="badge">Test</span>
             </div>
             <div class="card-content">
+                <div class="model-selector">
+                    <label for="modelSelect">Select Model</label>
+                    <select id="modelSelect">
+                        <option value="haiku-3.5">Claude 3 Haiku (Fast)</option>
+                        <option value="sonnet-3.7">Claude 3.5 Sonnet (Advanced)</option>
+                    </select>
+                </div>
                 <textarea id="prompt" placeholder="Enter LinkedIn post to analyze..."></textarea>
                 <button id="submit" class="primary-button">
-          <span class="button-icon">🚀</span>
-          Analyze
-        </button>
+                    <span class="button-icon">🚀</span>
+                    Analyze
+                </button>
                 <div id="response" class="response-box"></div>
             </div>
         </div>
-    </div>
 
+        <div id="subscriptionContainer" class="card authenticated" style="display: none;">
+            <div class="card-header">
+                <h2>Subscription</h2>
+                <span class="badge">Manage</span>
+            </div>
+            <div class="card-content">
+                <div class="tabs">
+                    <!-- Tabs will be added here by subscription-manager.js -->
+                </div>
+                <div class="tab-contents">
+                    <!-- Tab contents will be added here by subscription-manager.js -->
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="../lib/posthog/posthog.js"></script>
     <script src="posthog-init-inline.js"></script>

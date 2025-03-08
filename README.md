@@ -30,7 +30,14 @@ SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_KEY=your_supabase_service_key
 POSTHOG_API_KEY=your_posthog_api_key
 POSTHOG_API_HOST=your_posthog_host
+ANTHROPIC_API_KEY=your_anthropic_api_key
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
+STRIPE_PRO_PRICE_ID=your_stripe_price_id
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
 ```
+
+For Stripe configuration, see the [Stripe Integration Documentation](STRIPE_INTEGRATION_README.md).
 
 ### 2. Update the Extension Configuration
 
@@ -56,6 +63,13 @@ The Vercel backend provides the following API endpoints:
 - `/api/supabase/user-settings`: Handle user settings operations with tracking
 - `/api/supabase/beta-access`: Handle beta access verification with tracking
 - `/api/analytics/track`: Handle PostHog analytics tracking
+- `/api/usage`: Get user API usage information
+- `/api/subscriptions/status`: Get user subscription status
+- `/api/subscriptions/create-checkout`: Create a Stripe checkout session
+- `/api/subscriptions/cancel`: Cancel a subscription
+- `/api/subscriptions/update-api-key`: Update user's own API key settings
+- `/api/subscriptions/webhook`: Handle Stripe webhook events
+- `/api/config/*`: Securely provide configuration values to the client
 
 ### Tracking Implementation
 

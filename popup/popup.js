@@ -1,6 +1,6 @@
 import { createClient } from './supabase-client.js';
 import { checkBetaAccess } from './beta-validator.js';
-import { API_ENDPOINTS } from '../config.js';
+import { API_ENDPOINTS, MODELS, DEFAULT_MODEL } from '../config.js';
 import {
     initAnalytics,
     trackEvent,
@@ -13,6 +13,7 @@ import {
     trackSessionStart,
     identifyUserWithSupabase
 } from './analytics.js';
+import { createSubscriptionManager } from './subscription-manager.js';
 
 // Initialize Supabase client with async function
 let supabase = null;
@@ -309,6 +310,15 @@ document.addEventListener('DOMContentLoaded', async() => {
                 const usageData = await loadApiUsage();
                 updateApiUsageUI(usageData);
 
+                // Initialize subscription manager
+                const subscriptionContainer = document.getElementById('subscriptionContainer');
+                if (subscriptionContainer) {
+                    createSubscriptionManager(subscriptionContainer, supabase, showStatus, loadApiUsage);
+                }
+
+                // Initialize model selector
+                initializeModelSelector();
+
                 // Identify user in PostHog with Supabase data
                 await identifyUserWithSupabase(supabase, session.user.id);
             } else {
@@ -320,6 +330,35 @@ document.addEventListener('DOMContentLoaded', async() => {
         }
 
         initAnalytics(); // Initialize PostHog
+    }
+
+    // Function to initialize the model selector
+    function initializeModelSelector() {
+        const modelSelect = document.getElementById('modelSelect');
+        if (!modelSelect) return;
+
+        // Set the default model
+        modelSelect.value = DEFAULT_MODEL;
+
+        // Add event listener to save the selected model
+        modelSelect.addEventListener('change', async() => {
+            const selectedModel = modelSelect.value;
+
+            // Track model selection
+            trackEvent('Model_Selection', {
+                model: selectedModel
+            });
+
+            // Save the selected model to local storage
+            await chrome.storage.local.set({ selectedModel });
+        });
+
+        // Load the selected model from local storage
+        chrome.storage.local.get('selectedModel', (result) => {
+            if (result.selectedModel) {
+                modelSelect.value = result.selectedModel;
+            }
+        });
     }
 
     async function loadUserSettings() {
@@ -539,9 +578,14 @@ document.addEventListener('DOMContentLoaded', async() => {
             return;
         }
 
+        // Get the selected model
+        const modelSelect = document.getElementById('modelSelect');
+        const selectedModel = modelSelect ? modelSelect.value : DEFAULT_MODEL;
+
         // Track analyze text attempt
         trackEvent('Analyze_Text_Attempt', {
-            prompt_length: prompt.length
+            prompt_length: prompt.length,
+            model: selectedModel
         });
 
         const startTime = Date.now();
@@ -558,7 +602,8 @@ document.addEventListener('DOMContentLoaded', async() => {
                 action: 'analyze',
                 text: prompt,
                 apiKey: anthropicApiKey,
-                systemPrompt: systemPrompt
+                systemPrompt: systemPrompt,
+                model: selectedModel
             });
 
             if (response.success) {
@@ -572,7 +617,8 @@ document.addEventListener('DOMContentLoaded', async() => {
                 trackEvent('Analyze_Text_Success', {
                     prompt_length: prompt.length,
                     response_length: response.data.content[0].text.length,
-                    duration_ms: Date.now() - startTime
+                    duration_ms: Date.now() - startTime,
+                    model: selectedModel
                 });
             } else {
                 // Check if the error is related to API usage limits
@@ -595,7 +641,8 @@ document.addEventListener('DOMContentLoaded', async() => {
             trackEvent('Analyze_Text_Failure', {
                 prompt_length: prompt.length,
                 error: error.message,
-                duration_ms: Date.now() - startTime
+                duration_ms: Date.now() - startTime,
+                model: selectedModel
             });
         } finally {
             submitButton.disabled = false;
