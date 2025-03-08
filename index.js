@@ -83,6 +83,56 @@ app.get('/api/config/posthog-host', (req, res) => {
     return res.status(200).json({ host: posthogApiHost });
 });
 
+// Stripe Publishable Key
+app.get('/api/config/stripe-publishable-key', (req, res) => {
+    const stripePublishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+    if (!stripePublishableKey) {
+        return res.status(500).json({ error: 'Stripe publishable key not configured' });
+    }
+    return res.status(200).json({ key: stripePublishableKey });
+});
+
+// Stripe Secret Key (only for server-side use)
+app.get('/api/config/stripe-secret-key', (req, res) => {
+    // This endpoint should only be called from server-side code
+    // We're adding an extra layer of security by checking the host
+    const host = req.headers.host || '';
+    if (!host.includes('vercel.app') && !host.includes('localhost')) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeSecretKey) {
+        return res.status(500).json({ error: 'Stripe secret key not configured' });
+    }
+    return res.status(200).json({ key: stripeSecretKey });
+});
+
+// Stripe Price ID
+app.get('/api/config/stripe-price-id', (req, res) => {
+    const stripePriceId = process.env.STRIPE_PRO_PRICE_ID;
+    if (!stripePriceId) {
+        return res.status(500).json({ error: 'Stripe price ID not configured' });
+    }
+    return res.status(200).json({ priceId: stripePriceId });
+});
+
+// Stripe Webhook Secret (only for server-side use)
+app.get('/api/config/stripe-webhook-secret', (req, res) => {
+    // This endpoint should only be called from server-side code
+    // We're adding an extra layer of security by checking the host
+    const host = req.headers.host || '';
+    if (!host.includes('vercel.app') && !host.includes('localhost')) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!stripeWebhookSecret) {
+        return res.status(500).json({ error: 'Stripe webhook secret not configured' });
+    }
+    return res.status(200).json({ secret: stripeWebhookSecret });
+});
+
 // Analytics tracking endpoint
 app.post('/api/analytics/track', async(req, res) => {
     try {
