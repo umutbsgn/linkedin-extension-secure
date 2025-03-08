@@ -154,6 +154,151 @@ app.post('/api/analytics/track', async(req, res) => {
     }
 });
 
+// Import required modules for API usage tracking
+const { createClient } = require('@supabase/supabase-js');
+
+// Helper functions for tracking API calls
+const trackApiCallStart = (eventName, properties = {}, userId = 'anonymous_user') => {
+    console.log(`[${new Date().toISOString()}] API Call Start: ${eventName}`, { properties, userId });
+    return Date.now();
+};
+
+const trackApiCallSuccess = (eventName, startTime, properties = {}, userId = 'anonymous_user') => {
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] API Call Success: ${eventName}`, {
+        duration_ms: duration,
+        properties,
+        userId
+    });
+};
+
+const trackApiCallFailure = (eventName, startTime, errorMessage, properties = {}, userId = 'anonymous_user') => {
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] API Call Failure: ${eventName}`, {
+        duration_ms: duration,
+        error: errorMessage,
+        properties,
+        userId
+    });
+};
+
+// Helper functions for API usage tracking
+const getCurrentApiUsage = async(supabase, userId) => {
+    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+
+    try {
+        // Get the API usage limit (hardcoded for now)
+        const limit = 50;
+
+        // Get the current usage
+        const { data, error } = await supabase
+            .from('api_usage')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('month', currentMonth)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            console.error('Error getting API usage:', error);
+            return { error };
+        }
+
+        // If no entry exists, return default values
+        if (!data) {
+            return {
+                data: {
+                    callsCount: 0,
+                    limit: limit,
+                    hasRemainingCalls: true,
+                    nextResetDate: getNextMonthDate()
+                }
+            };
+        }
+
+        // Return the current usage
+        return {
+            data: {
+                callsCount: data.calls_count,
+                limit: limit,
+                hasRemainingCalls: data.calls_count < limit,
+                nextResetDate: getNextMonthDate()
+            }
+        };
+    } catch (error) {
+        console.error('Unexpected error in getCurrentApiUsage:', error);
+        return { error };
+    }
+};
+
+// Helper function to get next month date
+const getNextMonthDate = () => {
+    const now = new Date();
+    // First day of the next month
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return nextMonth.toISOString();
+};
+
+// API Usage endpoint
+app.get('/api/usage', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let userId = 'anonymous_user';
+
+    // Start tracking the API call
+    const startTime = trackApiCallStart('api_usage', {}, userId);
+
+    try {
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            trackApiCallFailure('api_usage', startTime, 'Supabase credentials not configured on server');
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            trackApiCallFailure('api_usage', startTime, authError ? authError.message : 'Invalid or expired token');
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        userId = user.id; // Update userId with actual user ID
+
+        // Get the current API usage for the user
+        const { data: usageData, error: usageError } = await getCurrentApiUsage(supabase, userId);
+
+        if (usageError) {
+            trackApiCallFailure('api_usage', startTime, 'Error retrieving API usage', {}, userId);
+            return res.status(500).json({ error: 'Error retrieving API usage' });
+        }
+
+        // Track successful API call
+        trackApiCallSuccess('api_usage', startTime, {}, userId);
+
+        // Return the API usage data
+        return res.status(200).json(usageData);
+    } catch (error) {
+        // Track failed API call
+        trackApiCallFailure('api_usage', startTime, error.message, {}, userId);
+
+        console.error('Error in API usage endpoint:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 // Anthropic API proxy endpoint
 app.post('/api/anthropic/analyze', async(req, res) => {
     try {
