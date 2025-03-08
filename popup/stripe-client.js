@@ -103,8 +103,13 @@ export async function redirectToCheckout(token) {
         // Create a checkout session
         const { url } = await createCheckoutSession(token);
 
-        // Redirect to the checkout page
-        window.open(url, '_blank');
+        // Redirect to the checkout page using Chrome API
+        if (chrome && chrome.tabs && chrome.tabs.create) {
+            chrome.tabs.create({ url: url });
+        } else {
+            // Fallback to window.open for non-Chrome environments
+            window.open(url, '_blank');
+        }
     } catch (error) {
         console.error('Error redirecting to checkout:', error);
         throw error;
