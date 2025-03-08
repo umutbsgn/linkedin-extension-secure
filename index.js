@@ -230,6 +230,91 @@ const getCurrentApiUsage = async(supabase, userId) => {
     }
 };
 
+// Function to check and update API usage
+const checkAndUpdateApiUsage = async(supabase, userId) => {
+    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+
+    try {
+        // Get the API usage limit (hardcoded for now)
+        const limit = 50;
+
+        // Check if an entry exists for the current month
+        let { data, error } = await supabase
+            .from('api_usage')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('month', currentMonth)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            console.error('Error checking API usage:', error);
+            return { error };
+        }
+
+        // If no entry exists, create a new one
+        if (!data) {
+            console.log(`Creating new API usage entry for user ${userId} and month ${currentMonth}`);
+            const { data: newData, error: insertError } = await supabase
+                .from('api_usage')
+                .insert([{
+                    user_id: userId,
+                    month: currentMonth,
+                    calls_count: 1,
+                    last_reset: new Date().toISOString()
+                }])
+                .select()
+                .single();
+
+            if (insertError) {
+                console.error('Error creating API usage entry:', insertError);
+                return { error: insertError };
+            }
+
+            return {
+                data: {
+                    callsCount: 1,
+                    limit: limit,
+                    hasRemainingCalls: true,
+                    nextResetDate: getNextMonthDate()
+                }
+            };
+        }
+
+        // Entry exists, increment counter
+        const newCount = data.calls_count + 1;
+        const hasRemainingCalls = newCount <= limit;
+
+        // Only update if the limit hasn't been exceeded
+        if (hasRemainingCalls) {
+            console.log(`Updating API usage for user ${userId}: ${data.calls_count} -> ${newCount}`);
+            const { error: updateError } = await supabase
+                .from('api_usage')
+                .update({
+                    calls_count: newCount,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', data.id);
+
+            if (updateError) {
+                console.error('Error updating API usage:', updateError);
+                return { error: updateError };
+            }
+        }
+
+        return {
+            data: {
+                callsCount: newCount,
+                limit: limit,
+                hasRemainingCalls,
+                nextResetDate: getNextMonthDate()
+            }
+        };
+    } catch (error) {
+        console.error('Unexpected error in checkAndUpdateApiUsage:', error);
+        return { error };
+    }
+};
+
 // Helper function to get next month date
 const getNextMonthDate = () => {
     const now = new Date();
@@ -301,27 +386,88 @@ app.get('/api/usage', async(req, res) => {
 
 // Anthropic API proxy endpoint
 app.post('/api/anthropic/analyze', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let userId = 'anonymous_user';
+
+    // Start tracking the API call
+    const startTime = trackApiCallStart('anthropic_messages', {
+        prompt_length: req.body.text ? req.body.text.length : 0,
+        system_prompt_length: req.body.systemPrompt ? req.body.systemPrompt.length : 0
+    }, userId);
+
     try {
-        // Get authorization token from request headers
-        const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ error: 'Missing or invalid authorization token' });
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            trackApiCallFailure('anthropic_messages', startTime, 'Supabase credentials not configured on server');
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
         }
 
-        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            trackApiCallFailure('anthropic_messages', startTime, authError ? authError.message : 'Invalid or expired token');
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        userId = user.id; // Update userId with actual user ID
+
+        // Check and update API usage
+        const { data: usageData, error: usageError } = await checkAndUpdateApiUsage(supabase, userId);
+
+        if (usageError) {
+            trackApiCallFailure('anthropic_messages', startTime, 'Error checking API usage', {}, user.email || userId);
+            return res.status(500).json({ error: 'Error checking API usage' });
+        }
+
+        if (!usageData.hasRemainingCalls) {
+            trackApiCallFailure('anthropic_messages', startTime, 'API call limit reached', {}, user.email || userId);
+            return res.status(403).json({
+                error: 'Monthly API call limit reached',
+                limit: usageData.limit,
+                used: usageData.callsCount,
+                resetDate: usageData.nextResetDate
+            });
+        }
 
         // Extract data from request
         const { text, systemPrompt } = req.body;
 
         if (!text) {
+            trackApiCallFailure('anthropic_messages', startTime, 'Missing required parameter: text', {}, user.email || userId);
             return res.status(400).json({ error: 'Missing required parameter: text' });
         }
 
-        // Call Anthropic API directly
+        // Use the API key from environment variable
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+
+        if (!apiKey) {
+            trackApiCallFailure('anthropic_messages', startTime,
+                'Anthropic API key not configured on server', {}, user.email || userId);
+            return res.status(500).json({
+                error: 'Anthropic API key not configured on server'
+            });
+        }
+
+        // Call Anthropic API
         const response = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
             headers: {
-                "x-api-key": process.env.ANTHROPIC_API_KEY,
+                "x-api-key": apiKey,
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json"
             },
@@ -335,9 +481,12 @@ app.post('/api/anthropic/analyze', async(req, res) => {
             })
         });
 
+        // Handle API response
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             const errorMessage = errorData.error && errorData.error.message || response.statusText;
+            trackApiCallFailure('anthropic_messages', startTime,
+                `API call failed: ${response.status} - ${errorMessage}`, {}, user.email || userId);
             return res.status(response.status).json({
                 error: `API call failed: ${response.status} - ${errorMessage}`
             });
@@ -345,8 +494,19 @@ app.post('/api/anthropic/analyze', async(req, res) => {
 
         // Return successful response
         const data = await response.json();
+
+        // Track successful API call
+        const responseSize = JSON.stringify(data).length;
+        trackApiCallSuccess('anthropic_messages', startTime, {
+            response_size_bytes: responseSize,
+            content_length: data.content && data.content[0] && data.content[0].text ? data.content[0].text.length : 0
+        }, userId);
+
         return res.status(200).json(data);
     } catch (error) {
+        // Track failed API call
+        trackApiCallFailure('anthropic_messages', startTime, error.message, {}, userId);
+
         console.error('Error in Anthropic API proxy:', error);
         return res.status(500).json({ error: error.message });
     }
