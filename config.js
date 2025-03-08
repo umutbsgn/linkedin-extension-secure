@@ -38,10 +38,10 @@ export const API_ENDPOINTS = {
     STRIPE_PUBLISHABLE_KEY: `${VERCEL_BACKEND_URL}/api/config/stripe-publishable-key`,
 
     // Subscription Management
-    SUBSCRIPTION_STATUS: `${VERCEL_BACKEND_URL}/api/subscriptions/status`,
-    CREATE_CHECKOUT: `${VERCEL_BACKEND_URL}/api/subscriptions/create-checkout`,
-    CANCEL_SUBSCRIPTION: `${VERCEL_BACKEND_URL}/api/subscriptions/cancel`,
-    UPDATE_API_KEY: `${VERCEL_BACKEND_URL}/api/subscriptions/update-api-key`
+    SUBSCRIPTION_STATUS: `${VERCEL_BACKEND_URL}/subscriptions/status`,
+    CREATE_CHECKOUT: `${VERCEL_BACKEND_URL}/subscriptions/create-checkout`,
+    CANCEL_SUBSCRIPTION: `${VERCEL_BACKEND_URL}/subscriptions/cancel`,
+    UPDATE_API_KEY: `${VERCEL_BACKEND_URL}/subscriptions/update-api-key`
 };
 
 // Available models
