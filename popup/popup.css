@@ -554,57 +554,135 @@ body {
 
 /* API Usage Styles */
 
+.api-usage-card {
+    transition: all 0.3s ease;
+}
+
+.api-usage-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
 .api-usage-container {
-    padding: 10px;
+    padding: 15px;
     background-color: #f9f9f9;
-    border-radius: 6px;
+    border-radius: 8px;
     margin-bottom: 10px;
+    transition: all 0.3s ease;
 }
 
 .usage-bar {
-    height: 8px;
+    height: 10px;
     background-color: #e0e0e0;
-    border-radius: 4px;
+    border-radius: 5px;
     overflow: hidden;
-    margin-bottom: 5px;
+    margin-bottom: 12px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    position: relative;
 }
 
 .usage-progress {
     height: 100%;
-    background-color: #4caf50;
-    /* Green */
-    transition: width 0.3s ease;
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
+    border-radius: 5px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.usage-progress::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient( 90deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.2) 20%, rgba(255, 255, 255, 0.1) 40%);
+    animation: shimmer 2s infinite;
+    transform: translateX(-100%);
+}
+
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
+    }
 }
 
 
 /* Red when less than 10% remaining */
 
 .usage-progress.low {
-    background-color: #f44336;
+    background: linear-gradient(90deg, #f44336, #e57373);
 }
 
 
 /* Yellow when less than 30% remaining */
 
 .usage-progress.medium {
-    background-color: #ff9800;
+    background: linear-gradient(90deg, #ff9800, #ffb74d);
 }
 
 .usage-text {
-    font-size: 12px;
+    font-size: 14px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    color: #333;
+    font-weight: 500;
 }
 
 .usage-reset {
     color: #757575;
-    font-size: 10px;
+    font-size: 12px;
+    background-color: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+}
+
+.usage-reset:hover {
+    background-color: #e0e0e0;
 }
 
 .loading-message {
     color: #757575;
-    font-size: 12px;
+    font-size: 14px;
     text-align: center;
-    padding: 10px;
+    padding: 15px;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.6;
+    }
+}
+
+
+/* Animation for API usage update */
+
+.api-usage-container.updated {
+    animation: highlight 1s ease;
+}
+
+@keyframes highlight {
+    0% {
+        background-color: rgba(10, 102, 194, 0.1);
+        transform: scale(0.98);
+    }
+    50% {
+        background-color: rgba(10, 102, 194, 0.2);
+        transform: scale(1.02);
+    }
+    100% {
+        background-color: #f9f9f9;
+        transform: scale(1);
+    }
 }

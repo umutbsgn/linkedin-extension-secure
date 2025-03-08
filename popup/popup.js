@@ -245,13 +245,22 @@ document.addEventListener('DOMContentLoaded', async() => {
         const remaining = Math.max(0, limit - callsCount);
         const usagePercentage = (callsCount / limit) * 100;
         const resetDate = new Date(nextResetDate).toLocaleDateString();
+        const usedPercentage = Math.round(usagePercentage);
+        const remainingPercentage = Math.round(100 - usagePercentage);
 
         // Determine color class based on remaining percentage
         let colorClass = '';
+        let statusText = 'Good';
+        let statusEmoji = '✅';
+
         if (remaining / limit < 0.1) {
             colorClass = 'low';
+            statusText = 'Critical';
+            statusEmoji = '⚠️';
         } else if (remaining / limit < 0.3) {
             colorClass = 'medium';
+            statusText = 'Warning';
+            statusEmoji = '⚠️';
         }
 
         apiUsageElement.innerHTML = `
@@ -259,10 +268,20 @@ document.addEventListener('DOMContentLoaded', async() => {
                 <div class="usage-progress ${colorClass}" style="width: ${usagePercentage}%"></div>
             </div>
             <div class="usage-text">
-                <span>${remaining} of ${limit} API calls remaining</span>
+                <span>${statusEmoji} ${remaining} of ${limit} API calls remaining</span>
                 <span class="usage-reset">Resets on: ${resetDate}</span>
             </div>
+            <div style="font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between;">
+                <span>Used: ${callsCount} (${usedPercentage}%)</span>
+                <span>Status: ${statusText}</span>
+            </div>
         `;
+
+        // Add animation effect when the data is updated
+        apiUsageElement.classList.add('updated');
+        setTimeout(() => {
+            apiUsageElement.classList.remove('updated');
+        }, 1000);
     }
 
     async function initializeExtension() {
