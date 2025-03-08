@@ -1,6 +1,91 @@
 // api/utils/usage.js
 // Utility functions for tracking and managing API usage
 
+// Cache for API usage limit to avoid frequent database queries
+let apiLimitCache = {
+    limit: 50,
+    timestamp: 0
+};
+
+// Cache expiration time in milliseconds (5 minutes)
+const CACHE_EXPIRATION = 5 * 60 * 1000;
+
+/**
+ * Gets the API usage limit from the system_config table
+ * @param {Object} supabase - Supabase client
+ * @returns {Promise<number>} The API usage limit
+ */
+async function getApiUsageLimit(supabase) {
+    // Check if cache is still valid
+    const now = Date.now();
+    if (now - apiLimitCache.timestamp < CACHE_EXPIRATION) {
+        return apiLimitCache.limit;
+    }
+
+    try {
+        // Try to get the limit from the database function
+        const { data, error } = await supabase.rpc('get_api_usage_limit');
+
+        if (error) {
+            console.error('Error getting API usage limit from function:', error);
+            // Fallback to direct query
+            return await getApiUsageLimitFallback(supabase);
+        }
+
+        if (data !== null && data !== undefined) {
+            // Update cache
+            apiLimitCache = {
+                limit: data,
+                timestamp: now
+            };
+            return data;
+        }
+
+        // If function returns null, fallback to direct query
+        return await getApiUsageLimitFallback(supabase);
+    } catch (error) {
+        console.error('Unexpected error in getApiUsageLimit:', error);
+        return 50; // Default fallback
+    }
+}
+
+/**
+ * Fallback method to get API usage limit directly from system_config table
+ * @param {Object} supabase - Supabase client
+ * @returns {Promise<number>} The API usage limit
+ */
+async function getApiUsageLimitFallback(supabase) {
+    try {
+        const { data, error } = await supabase
+            .from('system_config')
+            .select('value')
+            .eq('key', 'api_usage_limits')
+            .single();
+
+        if (error) {
+            console.error('Error getting API usage limit from table:', error);
+            return 50; // Default fallback
+        }
+
+        if (data && data.value && data.value.monthly_limit) {
+            const limit = parseInt(data.value.monthly_limit);
+            if (!isNaN(limit) && limit > 0) {
+                // Update cache
+                apiLimitCache = {
+                    limit: limit,
+                    timestamp: Date.now()
+                };
+                return limit;
+            }
+        }
+
+        return 50; // Default fallback
+    } catch (error) {
+        console.error('Unexpected error in getApiUsageLimitFallback:', error);
+        return 50; // Default fallback
+    }
+}
+
 /**
  * Checks and updates the API usage for a user
  * @param {Object} supabase - Supabase client
@@ -11,6 +96,9 @@ export async function checkAndUpdateApiUsage(supabase, userId) {
     const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
 
     try {
+        // Get the API usage limit
+        const limit = await getApiUsageLimit(supabase);
+
         // Check if an entry exists for the current month
         let { data, error } = await supabase
             .from('api_usage')
@@ -45,7 +133,7 @@ export async function checkAndUpdateApiUsage(supabase, userId) {
             return {
                 data: {
                     callsCount: 1,
-                    limit: 50,
+                    limit: limit,
                     hasRemainingCalls: true,
                     nextResetDate: getNextMonthDate()
                 }
@@ -54,7 +142,7 @@ export async function checkAndUpdateApiUsage(supabase, userId) {
 
         // Entry exists, increment counter
         const newCount = data.calls_count + 1;
-        const hasRemainingCalls = newCount <= 50;
+        const hasRemainingCalls = newCount <= limit;
 
         // Only update if the limit hasn't been exceeded
         if (hasRemainingCalls) {
@@ -75,7 +163,7 @@ export async function checkAndUpdateApiUsage(supabase, userId) {
         return {
             data: {
                 callsCount: newCount,
-                limit: 50,
+                limit: limit,
                 hasRemainingCalls,
                 nextResetDate: getNextMonthDate()
             }
@@ -96,6 +184,9 @@ export async function getCurrentApiUsage(supabase, userId) {
     const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
 
     try {
+        // Get the API usage limit
+        const limit = await getApiUsageLimit(supabase);
+
         // Get the current usage
         const { data, error } = await supabase
             .from('api_usage')
@@ -114,7 +205,7 @@ export async function getCurrentApiUsage(supabase, userId) {
             return {
                 data: {
                     callsCount: 0,
-                    limit: 50,
+                    limit: limit,
                     hasRemainingCalls: true,
                     nextResetDate: getNextMonthDate()
                 }
@@ -125,8 +216,8 @@ export async function getCurrentApiUsage(supabase, userId) {
         return {
             data: {
                 callsCount: data.calls_count,
-                limit: 50,
-                hasRemainingCalls: data.calls_count < 50,
+                limit: limit,
+                hasRemainingCalls: data.calls_count < limit,
                 nextResetDate: getNextMonthDate()
             }
         };
