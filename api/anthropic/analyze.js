@@ -15,6 +15,10 @@ const MODEL_MAPPING = {
 const DEFAULT_MODEL = 'haiku-3.5';
 
 export default async function handler(req, res) {
+    console.log('Anthropic analyze endpoint called');
+    console.log('Request method:', req.method);
+    console.log('Request headers:', JSON.stringify(req.headers));
+
     // Add CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -22,32 +26,44 @@ export default async function handler(req, res) {
 
     // Handle OPTIONS request for CORS preflight
     if (req.method === 'OPTIONS') {
+        console.log('Handling OPTIONS request');
         return res.status(200).end();
     }
 
     // Only allow POST requests
     if (req.method !== 'POST') {
+        console.log(`Method not allowed: ${req.method}`);
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
     // Get authorization token from request headers
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.log('Missing or invalid authorization token');
         return res.status(401).json({ error: 'Missing or invalid authorization token' });
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    console.log(`Token received: ${token.substring(0, 10)}...`);
+
     let userId = 'anonymous_user';
 
     // Extract data from request
     const { text, systemPrompt, model = DEFAULT_MODEL } = req.body;
+    console.log('Request body:', {
+        text: text ? text.substring(0, 50) + (text.length > 50 ? '...' : '') : undefined,
+        systemPrompt: systemPrompt ? systemPrompt.substring(0, 50) + (systemPrompt.length > 50 ? '...' : '') : undefined,
+        model
+    });
 
     if (!text) {
+        console.log('Missing required parameter: text');
         return res.status(400).json({ error: 'Missing required parameter: text' });
     }
 
     // Validate model
     if (!MODEL_MAPPING[model]) {
+        console.log(`Invalid model specified: ${model}`);
         return res.status(400).json({
             error: 'Invalid model specified',
             validModels: Object.keys(MODEL_MAPPING)
@@ -67,17 +83,24 @@ export default async function handler(req, res) {
         const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
 
         if (!supabaseUrl || !supabaseKey) {
+            console.log('Supabase credentials not configured on server');
             trackApiCallFailure('anthropic_messages', startTime, 'Supabase credentials not configured on server');
             return res.status(500).json({ error: 'Supabase credentials not configured on server' });
         }
 
+        console.log('Initializing Supabase client');
         // Initialize Supabase client
         const supabase = createClient(supabaseUrl, supabaseKey);
 
+        console.log('Verifying token and getting user information');
         // Verify the token and get user information
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        const authResponse = await supabase.auth.getUser(token);
+        console.log('Auth response received:', JSON.stringify(authResponse, null, 2));
+
+        const { data: { user }, error: authError } = authResponse;
 
         if (authError || !user) {
+            console.log('Auth error or no user:', authError);
             trackApiCallFailure('anthropic_messages', startTime, authError ? authError.message : 'Invalid or expired token');
             return res.status(401).json({
                 error: authError ? authError.message : 'Invalid or expired token'
@@ -85,27 +108,39 @@ export default async function handler(req, res) {
         }
 
         userId = user.id; // Update userId with actual user ID
+        console.log(`User ID: ${userId}`);
 
+        console.log('Checking if user should use their own API key');
         // Check if user should use their own API key
-        const { useOwnKey, apiKey: userApiKey } = await shouldUseOwnApiKey(supabase, userId);
+        const ownKeyResponse = await shouldUseOwnApiKey(supabase, userId);
+        console.log('Own key response:', JSON.stringify(ownKeyResponse, null, 2));
+
+        const { useOwnKey, apiKey: userApiKey } = ownKeyResponse;
 
         // Determine which API key to use
         let apiKey;
         let usingOwnKey = false;
 
         if (useOwnKey && userApiKey) {
+            console.log('Using user\'s own API key');
             apiKey = userApiKey;
             usingOwnKey = true;
         } else {
+            console.log('Checking and updating API usage');
             // Check and update API usage
-            const { data: usageData, error: usageError } = await checkAndUpdateApiUsage(supabase, userId, model);
+            const usageResponse = await checkAndUpdateApiUsage(supabase, userId, model);
+            console.log('Usage response:', JSON.stringify(usageResponse, null, 2));
+
+            const { data: usageData, error: usageError } = usageResponse;
 
             if (usageError) {
+                console.log('Error checking API usage:', usageError);
                 trackApiCallFailure('anthropic_messages', startTime, 'Error checking API usage', { model }, user.email || userId);
-                return res.status(500).json({ error: 'Error checking API usage' });
+                return res.status(500).json({ error: 'Error checking API usage', details: usageError });
             }
 
             if (!usageData.hasRemainingCalls) {
+                console.log('API call limit reached');
                 trackApiCallFailure('anthropic_messages', startTime, 'API call limit reached', { model }, user.email || userId);
                 return res.status(403).json({
                     error: 'Monthly API call limit reached',
@@ -120,11 +155,13 @@ export default async function handler(req, res) {
                 });
             }
 
+            console.log('Using server API key');
             // Use the API key from environment variable
             apiKey = process.env.ANTHROPIC_API_KEY;
         }
 
         if (!apiKey) {
+            console.log('Anthropic API key not configured');
             trackApiCallFailure('anthropic_messages', startTime,
                 'Anthropic API key not configured', { model, usingOwnKey }, user.email || userId);
             return res.status(500).json({
@@ -134,7 +171,9 @@ export default async function handler(req, res) {
 
         // Map the model name to the actual Anthropic model ID
         const anthropicModel = MODEL_MAPPING[model];
+        console.log(`Using Anthropic model: ${anthropicModel}`);
 
+        console.log('Calling Anthropic API');
         // Call Anthropic API
         const response = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
@@ -154,10 +193,24 @@ export default async function handler(req, res) {
             })
         });
 
+        console.log(`Anthropic API response status: ${response.status}`);
+
         // Handle API response
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            const errorMessage = errorData.error && errorData.error.message || response.statusText;
+            let errorMessage = response.statusText;
+            try {
+                const errorData = await response.json();
+                console.error('API error response:', errorData);
+                errorMessage = errorData.error && errorData.error.message || response.statusText;
+            } catch (e) {
+                console.error('Could not parse error response:', e);
+                try {
+                    const errorText = await response.text();
+                    console.error('Error response text:', errorText);
+                } catch (textError) {
+                    console.error('Could not read error response text:', textError);
+                }
+            }
 
             trackApiCallFailure('anthropic_messages', startTime,
                 `API call failed: ${response.status} - ${errorMessage}`, { model, usingOwnKey },
@@ -170,8 +223,14 @@ export default async function handler(req, res) {
             });
         }
 
+        console.log('Anthropic API call successful');
         // Return successful response
         const data = await response.json();
+        console.log('API response data:', {
+            id: data.id,
+            model: data.model,
+            content_length: data.content && data.content[0] && data.content[0].text ? data.content[0].text.length : 0
+        });
 
         // Track successful API call
         const responseSize = JSON.stringify(data).length;
@@ -182,6 +241,7 @@ export default async function handler(req, res) {
             usingOwnKey: usingOwnKey
         }, userId);
 
+        console.log('Returning successful response');
         return res.status(200).json({
             ...data,
             model: model,
@@ -189,9 +249,8 @@ export default async function handler(req, res) {
         });
     } catch (error) {
         // Track failed API call
-        trackApiCallFailure('anthropic_messages', startTime, error.message, { model }, userId);
-
         console.error('Error in Anthropic API proxy:', error);
+        trackApiCallFailure('anthropic_messages', startTime, error.message, { model }, userId);
         return res.status(500).json({
             error: error.message,
             model: model

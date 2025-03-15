@@ -235,6 +235,9 @@ async function trackEvent(eventName, properties = {}) {
 async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
     const startTime = Date.now();
 
+    console.log(`Calling Anthropic API with model: ${model}`);
+    console.log(`Prompt length: ${prompt.length}, System prompt length: ${systemPrompt ? systemPrompt.length : 0}`);
+
     // Track API call
     trackEvent('API_Call', {
         endpoint: 'anthropic_messages',
@@ -249,10 +252,15 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
         const token = result.supabaseAuthToken;
 
         if (!token) {
+            console.error('No authentication token found');
             throw new Error('Not authenticated. Please log in first.');
         }
 
+        console.log(`Using token: ${token.substring(0, 10)}...`);
+        console.log(`API endpoint: ${API_ENDPOINTS.ANALYZE}`);
+
         // Call the Vercel backend endpoint with auth token
+        console.log('Sending request to Anthropic API endpoint');
         const response = await fetch(API_ENDPOINTS.ANALYZE, {
             method: "POST",
             headers: {
@@ -267,10 +275,25 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
         });
 
         const responseTime = Date.now() - startTime;
+        console.log(`API response received in ${responseTime}ms with status: ${response.status}`);
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            const errorMessage = errorData.error && errorData.error.message || response.statusText;
+            console.error(`API response error: ${response.status} ${response.statusText}`);
+
+            let errorMessage = response.statusText;
+            try {
+                const errorData = await response.json();
+                console.error('API error response:', errorData);
+                errorMessage = errorData.error && errorData.error.message || response.statusText;
+            } catch (e) {
+                console.error('Could not parse error response:', e);
+                try {
+                    const errorText = await response.text();
+                    console.error('Error response text:', errorText);
+                } catch (textError) {
+                    console.error('Could not read error response text:', textError);
+                }
+            }
 
             // Track API call failure
             trackEvent('API_Call_Failure', {
@@ -284,8 +307,15 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
             throw new Error(`API call failed: ${response.status} - ${errorMessage}`);
         }
 
+        console.log('API response successful, parsing JSON');
         const data = await response.json();
         const responseSize = JSON.stringify(data).length;
+
+        console.log('API response data:', {
+            id: data.id,
+            model: data.model,
+            content_length: data.content && data.content[0] && data.content[0].text ? data.content[0].text.length : 0
+        });
 
         // Track API call success
         trackEvent('API_Call_Success', {
