@@ -1,6 +1,6 @@
 import { createClient } from './supabase-client.js';
 import { checkBetaAccess } from './beta-validator.js';
-import { API_ENDPOINTS } from '../config.js';
+import { API_ENDPOINTS, MODELS, DEFAULT_MODEL } from '../config.js';
 import {
     initAnalytics,
     trackEvent,
@@ -13,6 +13,7 @@ import {
     trackSessionStart,
     identifyUserWithSupabase
 } from './analytics.js';
+import { createSubscriptionManager } from './subscription-manager.js';
 
 // Initialize Supabase client with async function
 let supabase = null;
@@ -104,9 +105,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 document.addEventListener('DOMContentLoaded', async() => {
-    const apiKeyInput = document.getElementById('apiKey');
-    const saveApiKeyButton = document.getElementById('saveApiKey');
-    const showApiKeyButton = document.getElementById('showApiKey');
     const apiKeyStatus = document.getElementById('apiKeyStatus');
     const promptInput = document.getElementById('prompt');
     const submitButton = document.getElementById('submit');
@@ -128,6 +126,7 @@ document.addEventListener('DOMContentLoaded', async() => {
     const connectTab = document.getElementById('connectTab');
     const postsContent = document.getElementById('postsContent');
     const connectContent = document.getElementById('connectContent');
+    // API key related elements removed (now handled by subscription-manager.js)
 
     const DEFAULT_SYSTEM_PROMPT = `You are a flexible LinkedIn communication partner. Your task is to analyze the author's style, respond accordingly, and provide casual value. Your response should be concise, maximum 120 characters, and written directly in the author's style.`;
     const DEFAULT_CONNECT_SYSTEM_PROMPT = `You are a LinkedIn connection request assistant. Your task is to analyze the recipient's profile and craft a personalized, concise connection message. Keep it friendly, professional, and highlight a shared interest or mutual benefit. Maximum 160 characters.`;
@@ -136,23 +135,9 @@ document.addEventListener('DOMContentLoaded', async() => {
     // Initialize extension
     initializeExtension();
 
-    // Migrate old API key if exists
-    migrateOldApiKey();
-
-    async function migrateOldApiKey() {
-        const result = await chrome.storage.local.get(['apiKey', ANTHROPIC_API_KEY]);
-        if (result.apiKey && !result[ANTHROPIC_API_KEY]) {
-            await chrome.storage.local.set({
-                [ANTHROPIC_API_KEY]: result.apiKey
-            });
-            await chrome.storage.local.remove('apiKey');
-            console.log('Migrated old API key to new format');
-        }
-    }
+    // Migrate old API key if exists (now handled by subscription-manager.js)
 
     // Event listeners
-    saveApiKeyButton.addEventListener('click', saveUserSettings);
-    showApiKeyButton.addEventListener('click', toggleApiKeyVisibility);
     submitButton.addEventListener('click', analyzeText);
     resetPromptButton.addEventListener('click', resetSystemPrompt);
     resetConnectPromptButton.addEventListener('click', resetConnectSystemPrompt);
@@ -213,7 +198,26 @@ document.addEventListener('DOMContentLoaded', async() => {
                 return null;
             }
 
-            const response = await fetch(`${API_ENDPOINTS.VERCEL_BACKEND_URL}/api/usage`, {
+            // First, check if the user has a Pro subscription
+            const subscriptionResponse = await fetch(API_ENDPOINTS.SUBSCRIPTION_STATUS, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            let isPro = false;
+            let useOwnApiKey = false;
+
+            if (subscriptionResponse.ok) {
+                const subscriptionData = await subscriptionResponse.json();
+                isPro = subscriptionData.subscriptionType === 'pro';
+                useOwnApiKey = subscriptionData.useOwnApiKey;
+
+                console.log('Subscription status:', { isPro, useOwnApiKey });
+            }
+
+            // Get API usage data
+            const response = await fetch(API_ENDPOINTS.USAGE, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -224,7 +228,12 @@ document.addEventListener('DOMContentLoaded', async() => {
                 return null;
             }
 
-            return await response.json();
+            const usageData = await response.json();
+
+            // Update the UI with the usage data
+            updateApiUsageUI(usageData, isPro, useOwnApiKey);
+
+            return usageData;
         } catch (error) {
             console.error('Error loading API usage:', error);
             return null;
@@ -232,37 +241,228 @@ document.addEventListener('DOMContentLoaded', async() => {
     }
 
     // Function to update the UI with API usage data
-    function updateApiUsageUI(usageData) {
+    function updateApiUsageUI(usageData, isPro = false, useOwnApiKey = false) {
         const apiUsageElement = document.getElementById('apiUsage');
+        const modelUsageElement = document.getElementById('modelUsage');
+        const modelUsageContainer = document.querySelector('.model-usage-container');
+
         if (!apiUsageElement) return;
 
         if (!usageData) {
             apiUsageElement.innerHTML = '<div class="loading-message">API usage data not available</div>';
+            if (modelUsageContainer) modelUsageContainer.style.display = 'none';
             return;
         }
 
-        const { callsCount, limit, hasRemainingCalls, nextResetDate } = usageData;
-        const remaining = Math.max(0, limit - callsCount);
-        const usagePercentage = (callsCount / limit) * 100;
-        const resetDate = new Date(nextResetDate).toLocaleDateString();
+        // If user is Pro and using own API key, show unlimited usage
+        if (isPro && useOwnApiKey) {
+            apiUsageElement.innerHTML = `
+                <div class="usage-bar">
+                    <div class="usage-progress pro" style="width: 100%"></div>
+                </div>
+                <div class="usage-text">
+                    <span>✅ Unlimited API calls (using your own API key)</span>
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between;">
+                    <span>Pro Subscription</span>
+                    <span>Status: Unlimited</span>
+                </div>
+            `;
 
-        // Determine color class based on remaining percentage
-        let colorClass = '';
-        if (remaining / limit < 0.1) {
-            colorClass = 'low';
-        } else if (remaining / limit < 0.3) {
-            colorClass = 'medium';
+            // Add animation effect when the data is updated
+            apiUsageElement.classList.add('updated');
+            setTimeout(() => {
+                apiUsageElement.classList.remove('updated');
+            }, 1000);
+
+            // Hide model usage details for unlimited users
+            if (modelUsageContainer) modelUsageContainer.style.display = 'none';
+            return;
         }
 
-        apiUsageElement.innerHTML = `
-            <div class="usage-bar">
-                <div class="usage-progress ${colorClass}" style="width: ${usagePercentage}%"></div>
-            </div>
-            <div class="usage-text">
-                <span>${remaining} of ${limit} API calls remaining</span>
-                <span class="usage-reset">Resets on: ${resetDate}</span>
-            </div>
-        `;
+        // Check if we have the new format with models data
+        const hasModelsData = usageData.models && Object.keys(usageData.models).length > 0;
+
+        // If we have the new format, show detailed model usage
+        if (hasModelsData && modelUsageElement && modelUsageContainer) {
+            // Show the container
+            modelUsageContainer.style.display = 'block';
+
+            // Get the default model (haiku-3.5)
+            const defaultModelData = usageData.models['haiku-3.5'] || {
+                callsCount: 0,
+                limit: isPro ? 500 : 50,
+                nextResetDate: usageData.nextResetDate
+            };
+
+            // Show summary in the main API usage section
+            const callsCount = defaultModelData.callsCount || 0;
+            const limit = defaultModelData.limit || (isPro ? 500 : 50);
+            const hasRemainingCalls = limit === 0 ? true : (callsCount < limit);
+            const nextResetDate = defaultModelData.nextResetDate || usageData.nextResetDate;
+
+            const remaining = Math.max(0, limit - callsCount);
+            const usagePercentage = limit > 0 ? (callsCount / limit) * 100 : 0;
+            const resetDate = new Date(nextResetDate).toLocaleDateString();
+            const usedPercentage = Math.round(usagePercentage);
+
+            // Determine color class based on remaining percentage and subscription type
+            let colorClass = isPro ? 'pro' : '';
+            let statusText = 'Good';
+            let statusEmoji = '✅';
+
+            if (limit === 0) {
+                // Special case for unlimited usage
+                colorClass = 'pro';
+                statusText = 'Unlimited';
+                statusEmoji = '✅';
+            } else if (remaining / limit < 0.1) {
+                colorClass = 'low';
+                statusText = 'Critical';
+                statusEmoji = '⚠️';
+            } else if (remaining / limit < 0.3) {
+                colorClass = 'medium';
+                statusText = 'Warning';
+                statusEmoji = '⚠️';
+            }
+
+            // For Pro users, show higher limits
+            const displayLimit = isPro ? (limit || 500) : (limit || 50);
+            const displayRemaining = isPro ? (limit === 0 ? 'Unlimited' : remaining) : remaining;
+
+            apiUsageElement.innerHTML = `
+                <div class="usage-bar">
+                    <div class="usage-progress ${colorClass}" style="width: ${usagePercentage}%"></div>
+                </div>
+                <div class="usage-text">
+                    <span>${statusEmoji} ${displayRemaining} of ${displayLimit} API calls remaining</span>
+                    <span class="usage-reset">Resets on: ${resetDate}</span>
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between;">
+                    <span>Used: ${callsCount} (${usedPercentage}%)</span>
+                    <span>Status: ${statusText}</span>
+                </div>
+            `;
+
+            // Build the model usage details
+            let modelUsageHTML = '';
+
+            // Loop through all models
+            for (const [modelName, modelData] of Object.entries(usageData.models)) {
+                const modelCallsCount = modelData.callsCount || 0;
+                const modelLimit = modelData.limit || 0;
+                const modelRemaining = Math.max(0, modelLimit - modelCallsCount);
+                const modelUsagePercentage = modelLimit > 0 ? (modelCallsCount / modelLimit) * 100 : 0;
+
+                // Determine color class for this model
+                let modelColorClass = isPro ? 'pro' : '';
+                let modelStatusText = 'Good';
+                let modelStatusEmoji = '✅';
+
+                if (modelLimit === 0) {
+                    if (isPro) {
+                        // For Pro users, 0 limit means unlimited for some models
+                        modelColorClass = 'pro';
+                        modelStatusText = 'Unlimited';
+                        modelStatusEmoji = '✅';
+                    } else {
+                        // For Trial users, 0 limit means not available
+                        modelColorClass = 'low';
+                        modelStatusText = 'Not Available';
+                        modelStatusEmoji = '❌';
+                    }
+                } else if (modelRemaining / modelLimit < 0.1) {
+                    modelColorClass = 'low';
+                    modelStatusText = 'Critical';
+                    modelStatusEmoji = '⚠️';
+                } else if (modelRemaining / modelLimit < 0.3) {
+                    modelColorClass = 'medium';
+                    modelStatusText = 'Warning';
+                    modelStatusEmoji = '⚠️';
+                }
+
+                // Format model name for display
+                const displayModelName = modelName === 'haiku-3.5' ? 'Claude 3 Haiku' :
+                    modelName === 'sonnet-3.7' ? 'Claude 3.5 Sonnet' :
+                    modelName;
+
+                // For Pro users with 0 limit, show as unlimited
+                const displayModelLimit = (isPro && modelLimit === 0) ? 'Unlimited' : modelLimit;
+                const displayModelRemaining = (isPro && modelLimit === 0) ? 'Unlimited' : modelRemaining;
+
+                modelUsageHTML += `
+                    <div class="model-usage-item">
+                        <div class="model-name">${displayModelName}</div>
+                        <div class="usage-bar">
+                            <div class="usage-progress ${modelColorClass}" style="width: ${modelUsagePercentage}%"></div>
+                        </div>
+                        <div class="usage-text">
+                            <span>${modelStatusEmoji} ${displayModelRemaining} of ${displayModelLimit} calls</span>
+                        </div>
+                        <div style="font-size: 12px; color: #666; margin-top: 4px; display: flex; justify-content: space-between;">
+                            <span>Used: ${modelCallsCount}</span>
+                            <span>Status: ${modelStatusText}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            modelUsageElement.innerHTML = modelUsageHTML;
+        } else {
+            // Fallback to old format if no models data
+            if (modelUsageContainer) modelUsageContainer.style.display = 'none';
+
+            const { callsCount, limit, hasRemainingCalls, nextResetDate } = usageData;
+            const remaining = Math.max(0, limit - callsCount);
+            const usagePercentage = limit > 0 ? (callsCount / limit) * 100 : 0;
+            const resetDate = new Date(nextResetDate).toLocaleDateString();
+            const usedPercentage = Math.round(usagePercentage);
+            const remainingPercentage = Math.round(100 - usagePercentage);
+
+            // Determine color class based on remaining percentage and subscription type
+            let colorClass = isPro ? 'pro' : '';
+            let statusText = 'Good';
+            let statusEmoji = '✅';
+
+            if (limit === 0) {
+                // Special case for unlimited usage
+                colorClass = 'pro';
+                statusText = 'Unlimited';
+                statusEmoji = '✅';
+            } else if (remaining / limit < 0.1) {
+                colorClass = 'low';
+                statusText = 'Critical';
+                statusEmoji = '⚠️';
+            } else if (remaining / limit < 0.3) {
+                colorClass = 'medium';
+                statusText = 'Warning';
+                statusEmoji = '⚠️';
+            }
+
+            // For Pro users, show higher limits
+            const displayLimit = isPro ? (limit || 500) : (limit || 50);
+            const displayRemaining = isPro ? (limit === 0 ? 'Unlimited' : remaining) : remaining;
+
+            apiUsageElement.innerHTML = `
+                <div class="usage-bar">
+                    <div class="usage-progress ${colorClass}" style="width: ${usagePercentage}%"></div>
+                </div>
+                <div class="usage-text">
+                    <span>${statusEmoji} ${displayRemaining} of ${displayLimit} API calls remaining</span>
+                    <span class="usage-reset">Resets on: ${resetDate}</span>
+                </div>
+                <div style="font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between;">
+                    <span>Used: ${callsCount} (${usedPercentage}%)</span>
+                    <span>Status: ${statusText}</span>
+                </div>
+            `;
+        }
+
+        // Add animation effect when the data is updated
+        apiUsageElement.classList.add('updated');
+        setTimeout(() => {
+            apiUsageElement.classList.remove('updated');
+        }, 1000);
     }
 
     async function initializeExtension() {
@@ -290,6 +490,15 @@ document.addEventListener('DOMContentLoaded', async() => {
                 const usageData = await loadApiUsage();
                 updateApiUsageUI(usageData);
 
+                // Initialize subscription manager
+                const subscriptionContainer = document.getElementById('subscriptionContainer');
+                if (subscriptionContainer) {
+                    createSubscriptionManager(subscriptionContainer, supabase, showStatus, loadApiUsage);
+                }
+
+                // Initialize model selector
+                initializeModelSelector();
+
                 // Identify user in PostHog with Supabase data
                 await identifyUserWithSupabase(supabase, session.user.id);
             } else {
@@ -303,6 +512,35 @@ document.addEventListener('DOMContentLoaded', async() => {
         initAnalytics(); // Initialize PostHog
     }
 
+    // Function to initialize the model selector
+    function initializeModelSelector() {
+        const modelSelect = document.getElementById('modelSelect');
+        if (!modelSelect) return;
+
+        // Set the default model
+        modelSelect.value = DEFAULT_MODEL;
+
+        // Add event listener to save the selected model
+        modelSelect.addEventListener('change', async() => {
+            const selectedModel = modelSelect.value;
+
+            // Track model selection
+            trackEvent('Model_Selection', {
+                model: selectedModel
+            });
+
+            // Save the selected model to local storage
+            await chrome.storage.local.set({ selectedModel });
+        });
+
+        // Load the selected model from local storage
+        chrome.storage.local.get('selectedModel', (result) => {
+            if (result.selectedModel) {
+                modelSelect.value = result.selectedModel;
+            }
+        });
+    }
+
     async function loadUserSettings() {
         try {
             // Check if Supabase client is initialized
@@ -310,10 +548,9 @@ document.addEventListener('DOMContentLoaded', async() => {
                 console.error('Cannot load user settings: Supabase client not initialized');
 
                 // Try to load from local storage
-                const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'systemPrompt', 'connectSystemPrompt']);
+                const result = await chrome.storage.local.get(['systemPrompt', 'connectSystemPrompt']);
 
-                if (result[ANTHROPIC_API_KEY] || result.systemPrompt || result.connectSystemPrompt) {
-                    apiKeyInput.value = result[ANTHROPIC_API_KEY] || '';
+                if (result.systemPrompt || result.connectSystemPrompt) {
                     systemPromptInput.value = result.systemPrompt || DEFAULT_SYSTEM_PROMPT;
                     connectSystemPromptInput.value = result.connectSystemPrompt || DEFAULT_CONNECT_SYSTEM_PROMPT;
                     showStatus('Loaded settings from local storage only. Server connection unavailable.', 'warning');
@@ -335,11 +572,9 @@ document.addEventListener('DOMContentLoaded', async() => {
             if (error) throw error;
 
             if (data) {
-                apiKeyInput.value = data.api_key || '';
                 systemPromptInput.value = data.system_prompt || DEFAULT_SYSTEM_PROMPT;
                 connectSystemPromptInput.value = data.connect_system_prompt || DEFAULT_CONNECT_SYSTEM_PROMPT;
                 await chrome.storage.local.set({
-                    [ANTHROPIC_API_KEY]: data.api_key,
                     systemPrompt: data.system_prompt,
                     connectSystemPrompt: data.connect_system_prompt
                 });
@@ -353,10 +588,9 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             // Try to load from local storage as fallback
             try {
-                const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'systemPrompt', 'connectSystemPrompt']);
+                const result = await chrome.storage.local.get(['systemPrompt', 'connectSystemPrompt']);
 
-                if (result[ANTHROPIC_API_KEY] || result.systemPrompt || result.connectSystemPrompt) {
-                    apiKeyInput.value = result[ANTHROPIC_API_KEY] || '';
+                if (result.systemPrompt || result.connectSystemPrompt) {
                     systemPromptInput.value = result.systemPrompt || DEFAULT_SYSTEM_PROMPT;
                     connectSystemPromptInput.value = result.connectSystemPrompt || DEFAULT_CONNECT_SYSTEM_PROMPT;
                     showStatus('Loaded settings from local storage due to server error.', 'warning');
@@ -371,13 +605,12 @@ document.addEventListener('DOMContentLoaded', async() => {
     }
 
     async function saveUserSettings(retryCount = 0) {
-        const apiKey = apiKeyInput.value.trim();
+        // API key is now handled by subscription-manager.js
         const systemPrompt = systemPromptInput.value.trim();
         const connectSystemPrompt = connectSystemPromptInput.value.trim();
 
         // Track settings change attempt
         trackEvent('Settings_Change_Attempt', {
-            has_api_key: !!apiKey,
             system_prompt_length: systemPrompt.length,
             connect_system_prompt_length: connectSystemPrompt.length
         });
@@ -389,7 +622,6 @@ document.addEventListener('DOMContentLoaded', async() => {
             if (!supabase) {
                 // Save to local storage only
                 await chrome.storage.local.set({
-                    [ANTHROPIC_API_KEY]: apiKey,
                     systemPrompt,
                     connectSystemPrompt
                 });
@@ -398,7 +630,6 @@ document.addEventListener('DOMContentLoaded', async() => {
 
                 // Track settings change partial success
                 trackEvent('Settings_Change_Success', {
-                    has_api_key: !!apiKey,
                     system_prompt_length: systemPrompt.length,
                     connect_system_prompt_length: connectSystemPrompt.length,
                     partial: true,
@@ -418,7 +649,6 @@ document.addEventListener('DOMContentLoaded', async() => {
             }
 
             const settingsData = {
-                api_key: apiKey,
                 system_prompt: systemPrompt,
                 connect_system_prompt: connectSystemPrompt,
                 updated_at: new Date().toISOString()
@@ -450,7 +680,6 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             // Update local storage
             await chrome.storage.local.set({
-                [ANTHROPIC_API_KEY]: apiKey,
                 systemPrompt,
                 connectSystemPrompt
             });
@@ -459,7 +688,6 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             // Track settings change success
             trackEvent('Settings_Change_Success', {
-                has_api_key: !!apiKey,
                 system_prompt_length: systemPrompt.length,
                 connect_system_prompt_length: connectSystemPrompt.length
             });
@@ -476,7 +704,6 @@ document.addEventListener('DOMContentLoaded', async() => {
             // Still try to save to local storage
             try {
                 await chrome.storage.local.set({
-                    [ANTHROPIC_API_KEY]: apiKey,
                     systemPrompt,
                     connectSystemPrompt
                 });
@@ -503,15 +730,7 @@ document.addEventListener('DOMContentLoaded', async() => {
         }
     }
 
-    function toggleApiKeyVisibility() {
-        if (apiKeyInput.type === 'password') {
-            apiKeyInput.type = 'text';
-            showApiKeyButton.textContent = '🔒';
-        } else {
-            apiKeyInput.type = 'password';
-            showApiKeyButton.textContent = '👁️';
-        }
-    }
+    // API key visibility toggle function removed (now handled by subscription-manager.js)
 
     async function analyzeText() {
         const prompt = promptInput.value.trim();
@@ -520,9 +739,14 @@ document.addEventListener('DOMContentLoaded', async() => {
             return;
         }
 
+        // Get the selected model
+        const modelSelect = document.getElementById('modelSelect');
+        const selectedModel = modelSelect ? modelSelect.value : DEFAULT_MODEL;
+
         // Track analyze text attempt
         trackEvent('Analyze_Text_Attempt', {
-            prompt_length: prompt.length
+            prompt_length: prompt.length,
+            model: selectedModel
         });
 
         const startTime = Date.now();
@@ -531,15 +755,15 @@ document.addEventListener('DOMContentLoaded', async() => {
             submitButton.disabled = true;
             responseDiv.textContent = 'Analyzing...';
 
-            const {
-                [ANTHROPIC_API_KEY]: anthropicApiKey, systemPrompt
-            } = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'systemPrompt']);
+            // API key is now handled by subscription-manager.js
+            const { systemPrompt } = await chrome.storage.local.get(['systemPrompt']);
 
+            // API key is now handled by subscription-manager.js
             const response = await chrome.runtime.sendMessage({
                 action: 'analyze',
                 text: prompt,
-                apiKey: anthropicApiKey,
-                systemPrompt: systemPrompt
+                systemPrompt: systemPrompt,
+                model: selectedModel
             });
 
             if (response.success) {
@@ -553,7 +777,8 @@ document.addEventListener('DOMContentLoaded', async() => {
                 trackEvent('Analyze_Text_Success', {
                     prompt_length: prompt.length,
                     response_length: response.data.content[0].text.length,
-                    duration_ms: Date.now() - startTime
+                    duration_ms: Date.now() - startTime,
+                    model: selectedModel
                 });
             } else {
                 // Check if the error is related to API usage limits
@@ -576,7 +801,8 @@ document.addEventListener('DOMContentLoaded', async() => {
             trackEvent('Analyze_Text_Failure', {
                 prompt_length: prompt.length,
                 error: error.message,
-                duration_ms: Date.now() - startTime
+                duration_ms: Date.now() - startTime,
+                model: selectedModel
             });
         } finally {
             submitButton.disabled = false;
@@ -719,11 +945,10 @@ document.addEventListener('DOMContentLoaded', async() => {
                 // Still clear local storage and UI
                 showUnauthenticatedUI();
                 // Clear input fields
-                apiKeyInput.value = '';
                 systemPromptInput.value = '';
                 emailInput.value = '';
                 passwordInput.value = '';
-                await chrome.storage.local.remove([ANTHROPIC_API_KEY, 'systemPrompt', 'supabaseAuthToken']);
+                await chrome.storage.local.remove(['systemPrompt', 'supabaseAuthToken']);
                 await notifyAuthStatusChange('unauthenticated');
 
                 // Track sign out success (partial)
@@ -742,11 +967,10 @@ document.addEventListener('DOMContentLoaded', async() => {
             showAuthStatus('Logged out successfully', 'success');
             showUnauthenticatedUI();
             // Clear input fields
-            apiKeyInput.value = '';
             systemPromptInput.value = '';
             emailInput.value = '';
             passwordInput.value = '';
-            await chrome.storage.local.remove([ANTHROPIC_API_KEY, 'systemPrompt', 'supabaseAuthToken']);
+            await chrome.storage.local.remove(['systemPrompt', 'supabaseAuthToken']);
             await notifyAuthStatusChange('unauthenticated');
 
             // Track sign out success
@@ -766,8 +990,8 @@ document.addEventListener('DOMContentLoaded', async() => {
     // Function to check if user is authenticated
     async function isUserAuthenticated() {
         try {
-            const result = await chrome.storage.local.get([ANTHROPIC_API_KEY, 'supabaseAuthToken']);
-            return !!(result[ANTHROPIC_API_KEY] && result.supabaseAuthToken);
+            const result = await chrome.storage.local.get(['supabaseAuthToken']);
+            return !!result.supabaseAuthToken;
         } catch (error) {
             console.error('Error checking authentication status:', error);
             return false;
