@@ -1,5 +1,5 @@
 import { createClient } from './popup/supabase-client.js';
-import { API_ENDPOINTS } from './config.js';
+import { API_ENDPOINTS, MODELS, DEFAULT_MODEL } from './config.js';
 
 // Initialize Supabase client with async function
 let supabase = null;
@@ -120,14 +120,15 @@ async function trackEvent(eventName, properties = {}) {
     }
 }
 
-async function callAnthropicAPI(prompt, systemPrompt) {
+async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
     const startTime = Date.now();
 
     // Track API call
     trackEvent('API_Call', {
         endpoint: 'anthropic_messages',
         prompt_length: prompt.length,
-        system_prompt_length: systemPrompt.length
+        system_prompt_length: systemPrompt ? systemPrompt.length : 0,
+        model: model
     });
 
     try {
@@ -148,7 +149,8 @@ async function callAnthropicAPI(prompt, systemPrompt) {
             },
             body: JSON.stringify({
                 text: prompt,
-                systemPrompt: systemPrompt
+                systemPrompt: systemPrompt || "",
+                model: model
             })
         });
 
@@ -163,7 +165,8 @@ async function callAnthropicAPI(prompt, systemPrompt) {
                 endpoint: 'anthropic_messages',
                 error: errorMessage,
                 status_code: response.status,
-                response_time_ms: responseTime
+                response_time_ms: responseTime,
+                model: model
             });
 
             throw new Error(`API call failed: ${response.status} - ${errorMessage}`);
@@ -177,7 +180,8 @@ async function callAnthropicAPI(prompt, systemPrompt) {
             endpoint: 'anthropic_messages',
             response_time_ms: responseTime,
             response_size_bytes: responseSize,
-            content_length: data.content && data.content[0] && data.content[0].text && data.content[0].text.length || 0
+            content_length: data.content && data.content[0] && data.content[0].text && data.content[0].text.length || 0,
+            model: model
         });
 
         return data;
@@ -189,7 +193,8 @@ async function callAnthropicAPI(prompt, systemPrompt) {
             trackEvent('API_Call_Failure', {
                 endpoint: 'anthropic_messages',
                 error: error.message,
-                response_time_ms: Date.now() - startTime
+                response_time_ms: Date.now() - startTime,
+                model: model
             });
         }
 
@@ -202,7 +207,7 @@ const DEFAULT_CONNECT_SYSTEM_PROMPT = 'You are a LinkedIn connection request ass
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "analyze") {
-        callAnthropicAPI(request.text, request.systemPrompt)
+        callAnthropicAPI(request.text, request.systemPrompt, request.model || DEFAULT_MODEL)
             .then(response => sendResponse({ success: true, data: response }))
             .catch(error => sendResponse({ success: false, error: error.message }));
         return true; // Indicates an asynchronous response

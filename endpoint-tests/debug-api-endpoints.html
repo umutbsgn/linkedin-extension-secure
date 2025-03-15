@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Endpoints Debugger</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .success {
+            border-color: #4CAF50;
+            background-color: #E8F5E9;
+        }
+        
+        .error {
+            border-color: #F44336;
+            background-color: #FFEBEE;
+        }
+        
+        .warning {
+            border-color: #FF9800;
+            background-color: #FFF3E0;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button.secondary {
+            background-color: #2196F3;
+        }
+        
+        button.secondary:hover {
+            background-color: #0b7dda;
+        }
+        
+        button.warning {
+            background-color: #FF9800;
+        }
+        
+        button.warning:hover {
+            background-color: #e68a00;
+        }
+        
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .endpoint {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        
+        input,
+        select {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            font-family: monospace;
+        }
+        
+        .debug-info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            border-left: 4px solid #2196F3;
+        }
+        
+        .debug-info h4 {
+            margin-top: 0;
+            color: #2196F3;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        
+        .tab {
+            padding: 10px 15px;
+            cursor: pointer;
+            background-color: #f1f1f1;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            margin-right: 5px;
+        }
+        
+        .tab.active {
+            background-color: #fff;
+            border-bottom: 1px solid #fff;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 0 4px 4px 4px;
+            margin-top: -1px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 4px;
+        }
+        
+        .log-entry.info {
+            background-color: #E3F2FD;
+        }
+        
+        .log-entry.error {
+            background-color: #FFEBEE;
+        }
+        
+        .log-entry.success {
+            background-color: #E8F5E9;
+        }
+        
+        .log-entry.warning {
+            background-color: #FFF3E0;
+        }
+        
+        .timestamp {
+            color: #666;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>API Endpoints Debugger</h1>
+
+    <div class="card">
+        <h2>Configuration</h2>
+        <label for="vercelUrl">Vercel Backend URL:</label>
+        <input type="text" id="vercelUrl" value="https://linkedin-extension-secure-elew.vercel.app">
+
+        <label for="authToken">Authentication Token (Bearer):</label>
+        <div style="display: flex; margin-bottom: 10px;">
+            <input type="text" id="authToken" placeholder="Enter your Supabase auth token" style="flex: 1; margin-bottom: 0;">
+            <button id="loadTokenButton" class="secondary" style="margin-left: 10px;">Gespeicherten Token laden</button>
+        </div>
+
+        <div id="tokenStatus" style="margin-bottom: 10px; padding: 8px; border-radius: 4px; display: none;"></div>
+
+        <div style="margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px;">
+            <h3>Authentifizierungstoken:</h3>
+            <p>Für diese Tests wird ein gültiger Authentifizierungstoken benötigt.</p>
+            <p>Sie haben zwei Möglichkeiten, einen Token zu erhalten:</p>
+            <ol>
+                <li><a href="auth-token-generator.html" style="color: #2196F3;">Authentifizierungstoken generieren</a> - Melden Sie sich an oder registrieren Sie sich</li>
+                <li>Manuell einen Token eingeben, falls Sie bereits einen haben</li>
+            </ol>
+            <p><strong>Hinweis:</strong> Der Token ist temporär und läuft nach einiger Zeit ab.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Debug Log</h2>
+        <div id="debugLog" style="max-height: 200px; overflow-y: auto; margin-bottom: 10px; padding: 10px; background-color: #f5f5f5; border-radius: 4px;">
+            <div class="log-entry info">
+                <span class="timestamp">[15.3.2025, 3:36:00 PM]</span> Debug-Sitzung gestartet
+            </div>
+        </div>
+        <button id="clearLog" class="warning">Clear Log</button>
+    </div>
+
+    <div class="card">
+        <h2>Test Subscription Status Endpoint</h2>
+        <p>Endpoint: <span class="endpoint" id="subscriptionStatusEndpoint"></span></p>
+        <button id="testSubscriptionStatus">Test Subscription Status</button>
+
+        <div id="subscriptionStatusResult" class="hidden">
+            <h3>Result:</h3>
+            <div class="tabs">
+                <div class="tab active" data-tab="subscriptionStatusResponse">Response</div>
+                <div class="tab" data-tab="subscriptionStatusHeaders">Headers</div>
+                <div class="tab" data-tab="subscriptionStatusRequest">Request</div>
+            </div>
+            <div class="tab-content active" id="subscriptionStatusResponse">
+                <pre id="subscriptionStatusResponseContent"></pre>
+            </div>
+            <div class="tab-content" id="subscriptionStatusHeaders">
+                <pre id="subscriptionStatusHeadersContent"></pre>
+            </div>
+            <div class="tab-content" id="subscriptionStatusRequest">
+                <pre id="subscriptionStatusRequestContent"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Test API Usage Endpoint</h2>
+        <p>Endpoint: <span class="endpoint" id="usageEndpoint"></span></p>
+        <button id="testUsage">Test API Usage Endpoint</button>
+
+        <div id="usageResult" class="hidden">
+            <h3>Result:</h3>
+            <div class="tabs">
+                <div class="tab active" data-tab="usageResponse">Response</div>
+                <div class="tab" data-tab="usageHeaders">Headers</div>
+                <div class="tab" data-tab="usageRequest">Request</div>
+            </div>
+            <div class="tab-content active" id="usageResponse">
+                <pre id="usageResponseContent"></pre>
+            </div>
+            <div class="tab-content" id="usageHeaders">
+                <pre id="usageHeadersContent"></pre>
+            </div>
+            <div class="tab-content" id="usageRequest">
+                <pre id="usageRequestContent"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Test Anthropic Analyze Endpoint</h2>
+        <p>Endpoint: <span class="endpoint" id="analyzeEndpoint"></span></p>
+
+        <label for="analyzeText">Text to Analyze:</label>
+        <textarea id="analyzeText">This is a test message to check if the Anthropic API is working correctly.</textarea>
+
+        <label for="systemPrompt">System Prompt (optional):</label>
+        <textarea id="systemPrompt">You are a helpful assistant.</textarea>
+
+        <label for="model">Model:</label>
+        <select id="model">
+            <option value="haiku-3.5">haiku-3.5</option>
+            <option value="sonnet-3.7">sonnet-3.7</option>
+        </select>
+
+        <button id="testAnalyze">Test Anthropic Analyze Endpoint</button>
+
+        <div id="analyzeResult" class="hidden">
+            <h3>Result:</h3>
+            <div class="tabs">
+                <div class="tab active" data-tab="analyzeResponse">Response</div>
+                <div class="tab" data-tab="analyzeHeaders">Headers</div>
+                <div class="tab" data-tab="analyzeRequest">Request</div>
+            </div>
+            <div class="tab-content active" id="analyzeResponse">
+                <pre id="analyzeResponseContent"></pre>
+            </div>
+            <div class="tab-content" id="analyzeHeaders">
+                <pre id="analyzeHeadersContent"></pre>
+            </div>
+            <div class="tab-content" id="analyzeRequest">
+                <pre id="analyzeRequestContent"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Test Cache Invalidation</h2>
+        <p>This test will check if the cache invalidation is working correctly by making multiple requests in sequence.</p>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <button id="testCacheInvalidation" class="secondary">Run Cache Invalidation Test</button>
+            <button id="testSubscriptionFlow" class="warning">Test Full Subscription Flow</button>
+        </div>
+
+        <div id="cacheInvalidationResult" class="hidden">
+            <h3>Cache Invalidation Test Results:</h3>
+            <pre id="cacheInvalidationResponse"></pre>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Environment Variables Check</h2>
+        <p>This will check if all required environment variables are configured in Vercel.</p>
+        <button id="checkEnvVariables">Check Environment Variables</button>
+
+        <div id="envVariablesResult" class="hidden">
+            <h3>Environment Variables Status:</h3>
+            <pre id="envVariablesResponse"></pre>
+        </div>
+    </div>
+
+    <div id="errorResult" class="card error hidden">
+        <h2>❌ Test Failed</h2>
+        <p>Error: <span id="errorMessage"></span></p>
+        <div class="debug-info">
+            <h4>Debug Information</h4>
+            <pre id="errorDetails"></pre>
+        </div>
+    </div>
+
+    <script>
+        // Debug log functions
+        function logInfo(message) {
+            const log = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            log.innerHTML += `<div class="log-entry info"><span class="timestamp">[${timestamp}]</span> ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function logError(message) {
+            const log = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            log.innerHTML += `<div class="log-entry error"><span class="timestamp">[${timestamp}]</span> ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function logSuccess(message) {
+            const log = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            log.innerHTML += `<div class="log-entry success"><span class="timestamp">[${timestamp}]</span> ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function logWarning(message) {
+            const log = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            log.innerHTML += `<div class="log-entry warning"><span class="timestamp">[${timestamp}]</span> ${message}</div>`;
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Clear log
+        document.getElementById('clearLog').addEventListener('click', () => {
+            document.getElementById('debugLog').innerHTML = '';
+            logInfo('Log cleared');
+        });
+
+        // Tab switching
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('tab')) {
+                const tabId = e.target.getAttribute('data-tab');
+                const tabContainer = e.target.parentNode;
+                const contentContainer = tabContainer.nextElementSibling.parentNode;
+
+                // Remove active class from all tabs and contents
+                tabContainer.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+                contentContainer.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+                // Add active class to clicked tab and corresponding content
+                e.target.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+            }
+        });
+
+        // Update endpoints when the Vercel URL changes
+        function updateEndpoints() {
+            const vercelUrl = document.getElementById('vercelUrl').value;
+            const usageEndpoint = `${vercelUrl}/api/usage`;
+            const analyzeEndpoint = `${vercelUrl}/api/anthropic/analyze`;
+            const subscriptionStatusEndpoint = `${vercelUrl}/api/subscriptions/status`;
+
+            document.getElementById('usageEndpoint').textContent = usageEndpoint;
+            document.getElementById('analyzeEndpoint').textContent = analyzeEndpoint;
+            document.getElementById('subscriptionStatusEndpoint').textContent = subscriptionStatusEndpoint;
+
+            return {
+                usageEndpoint,
+                analyzeEndpoint,
+                subscriptionStatusEndpoint
+            };
+        }
+
+        // Initial update
+        updateEndpoints();
+
+        // Add event listener for URL changes
+        document.getElementById('vercelUrl').addEventListener('input', updateEndpoints);
+
+        // Load token from local storage
+        document.getElementById('loadTokenButton').addEventListener('click', () => {
+            const token = localStorage.getItem('supabaseAuthToken');
+            const tokenStatus = document.getElementById('tokenStatus');
+
+            if (token) {
+                document.getElementById('authToken').value = token;
+                tokenStatus.textContent = 'Token erfolgreich geladen!';
+                tokenStatus.style.backgroundColor = '#E8F5E9';
+                tokenStatus.style.color = '#2E7D32';
+                tokenStatus.style.display = 'block';
+                logSuccess('Token aus dem lokalen Speicher geladen');
+            } else {
+                tokenStatus.textContent = 'Kein gespeicherter Token gefunden. Bitte generieren Sie einen Token über den Link oben.';
+                tokenStatus.style.backgroundColor = '#FFEBEE';
+                tokenStatus.style.color = '#C62828';
+                tokenStatus.style.display = 'block';
+                logError('Kein Token im lokalen Speicher gefunden');
+            }
+        });
+
+        // Check for token on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('supabaseAuthToken');
+            if (token) {
+                document.getElementById('authToken').value = token;
+                const tokenStatus = document.getElementById('tokenStatus');
+                tokenStatus.textContent = 'Token automatisch geladen!';
+                tokenStatus.style.backgroundColor = '#E8F5E9';
+                tokenStatus.style.color = '#2E7D32';
+                tokenStatus.style.display = 'block';
+                logInfo('Token automatisch aus dem lokalen Speicher geladen');
+            }
+        });
+
+        // Helper function to format headers for display
+        function formatHeaders(headers) {
+            const result = {};
+            headers.forEach((value, key) => {
+                result[key] = value;
+            });
+            return result;
+        }
+
+        // Test Subscription Status Endpoint
+        document.getElementById('testSubscriptionStatus').addEventListener('click', async() => {
+            // Reset UI
+            document.getElementById('subscriptionStatusResult').classList.add('hidden');
+            document.getElementById('errorResult').classList.add('hidden');
+
+            const {
+                subscriptionStatusEndpoint
+            } = updateEndpoints();
+            const authToken = document.getElementById('authToken').value;
+
+            if (!authToken) {
+                document.getElementById('errorMessage').textContent = 'Authentication token is required';
+                document.getElementById('errorResult').classList.remove('hidden');
+                logError('Authentication token is required for subscription status test');
+                return;
+            }
+
+            logInfo(`Testing subscription status endpoint: ${subscriptionStatusEndpoint}`);
+
+            try {
+                const response = await fetch(subscriptionStatusEndpoint, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                // Store request details
+                document.getElementById('subscriptionStatusRequestContent').textContent = JSON.stringify({
+                    url: subscriptionStatusEndpoint,
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + authToken.substring(0, 10) + '...'
+                    }
+                }, null, 2);
+
+                // Store response headers
+                document.getElementById('subscriptionStatusHeadersContent').textContent = JSON.stringify(formatHeaders(response.headers), null, 2);
+
+                // Get response data
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = {
+                        error: 'Failed to parse JSON response',
+                        rawText: await response.text()
+                    };
+                }
+
+                document.getElementById('subscriptionStatusResponseContent').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('subscriptionStatusResult').classList.remove('hidden');
+
+                if (response.ok) {
+                    document.getElementById('subscriptionStatusResult').classList.add('success');
+                    logSuccess(`Subscription status test successful: ${response.status} ${response.statusText}`);
+
+                    // Log subscription details
+                    if (data.subscriptionType) {
+                        logInfo(`User subscription type: ${data.subscriptionType}`);
+                    }
+                    if (data.hasActiveSubscription !== undefined) {
+                        logInfo(`Has active subscription: ${data.hasActiveSubscription}`);
+                    }
+                } else {
+                    document.getElementById('subscriptionStatusResult').classList.add('error');
+                    logError(`Subscription status test failed: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorDetails').textContent = error.stack;
+                document.getElementById('errorResult').classList.remove('hidden');
+                logError(`Error testing subscription status: ${error.message}`);
+            }
+        });
+
+        // Test API Usage Endpoint
+        document.getElementById('testUsage').addEventListener('click', async() => {
+            // Reset UI
+            document.getElementById('usageResult').classList.add('hidden');
+            document.getElementById('errorResult').classList.add('hidden');
+
+            const {
+                usageEndpoint
+            } = updateEndpoints();
+            const authToken = document.getElementById('authToken').value;
+
+            if (!authToken) {
+                document.getElementById('errorMessage').textContent = 'Authentication token is required';
+                document.getElementById('errorResult').classList.remove('hidden');
+                logError('Authentication token is required for API usage test');
+                return;
+            }
+
+            logInfo(`Testing API usage endpoint: ${usageEndpoint}`);
+
+            try {
+                const response = await fetch(usageEndpoint, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                // Store request details
+                document.getElementById('usageRequestContent').textContent = JSON.stringify({
+                    url: usageEndpoint,
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + authToken.substring(0, 10) + '...'
+                    }
+                }, null, 2);
+
+                // Store response headers
+                document.getElementById('usageHeadersContent').textContent = JSON.stringify(formatHeaders(response.headers), null, 2);
+
+                // Get response data
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = {
+                        error: 'Failed to parse JSON response',
+                        rawText: await response.text()
+                    };
+                }
+
+                document.getElementById('usageResponseContent').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('usageResult').classList.remove('hidden');
+
+                if (response.ok) {
+                    document.getElementById('usageResult').classList.add('success');
+                    logSuccess(`API usage test successful: ${response.status} ${response.statusText}`);
+
+                    // Log usage details
+                    if (data.callsCount !== undefined) {
+                        logInfo(`API calls count: ${data.callsCount}`);
+                    }
+                    if (data.limit !== undefined) {
+                        logInfo(`API calls limit: ${data.limit}`);
+                    }
+                } else {
+                    document.getElementById('usageResult').classList.add('error');
+                    logError(`API usage test failed: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorDetails').textContent = error.stack;
+                document.getElementById('errorResult').classList.remove('hidden');
+                logError(`Error testing API usage: ${error.message}`);
+            }
+        });
+
+        // Test Anthropic Analyze Endpoint
+        document.getElementById('testAnalyze').addEventListener('click', async() => {
+            // Reset UI
+            document.getElementById('analyzeResult').classList.add('hidden');
+            document.getElementById('errorResult').classList.add('hidden');
+
+            const {
+                analyzeEndpoint
+            } = updateEndpoints();
+            const authToken = document.getElementById('authToken').value;
+            const text = document.getElementById('analyzeText').value;
+            const systemPrompt = document.getElementById('systemPrompt').value;
+            const model = document.getElementById('model').value;
+
+            if (!authToken) {
+                document.getElementById('errorMessage').textContent = 'Authentication token is required';
+                document.getElementById('errorResult').classList.remove('hidden');
+                logError('Authentication token is required for Anthropic analyze test');
+                return;
+            }
+
+            if (!text) {
+                document.getElementById('errorMessage').textContent = 'Text to analyze is required';
+                document.getElementById('errorResult').classList.remove('hidden');
+                logError('Text to analyze is required');
+                return;
+            }
+
+            logInfo(`Testing Anthropic analyze endpoint: ${analyzeEndpoint} with model ${model}`);
+
+            const requestBody = {
+                text,
+                systemPrompt,
+                model
+            };
+
+            try {
+                const response = await fetch(analyzeEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                // Store request details
+                document.getElementById('analyzeRequestContent').textContent = JSON.stringify({
+                    url: analyzeEndpoint,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + authToken.substring(0, 10) + '...'
+                    },
+                    body: requestBody
+                }, null, 2);
+
+                // Store response headers
+                document.getElementById('analyzeHeadersContent').textContent = JSON.stringify(formatHeaders(response.headers), null, 2);
+
+                // Get response data
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = {
+                        error: 'Failed to parse JSON response',
+                        rawText: await response.text()
+                    };
+                }
+
+                document.getElementById('analyzeResponseContent').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('analyzeResult').classList.remove('hidden');
+
+                if (response.ok) {
+                    document.getElementById('analyzeResult').classList.add('success');
+                    logSuccess(`Anthropic analyze test successful: ${response.status} ${response.statusText}`);
+
+                    // Log response details
+                    if (data.content && data.content[0] && data.content[0].text) {
+                        const responseText = data.content[0].text;
+                        logInfo(`Anthropic response: ${responseText.substring(0, 50)}...`);
+                    }
+                } else {
+                    document.getElementById('analyzeResult').classList.add('error');
+                    logError(`Anthropic analyze test failed: ${response.status} ${response.statusText}`);
+
+                    // Log error details
+                    if (data.error) {
+                        logError(`Error: ${data.error}`);
+                    }
+                    if (data.details) {
+                        logError(`Details: ${data.details}`);
+                    }
+                }
+            } catch (error) {
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorDetails').textContent = error.stack;
+                document.getElementById('errorResult').classList.remove('hidden');
+                logError(`Error testing Anthropic analyze: ${error.message}`);
+            }
+        });
+
+        // Test Cache Invalidation
+        document.getElementById('testCacheInvalidation').addEventListener('click', async() => {
+                    // Reset UI
+                    document.getElementById('cacheInvalidationResult').classList.add('hidden');
+                    document.getElementById('errorResult').classList.add('hidden');
+
+                    const authToken = document.getElementById('authToken').value;
+
+                    if (!authToken) {
+                        document.getElementById('errorMessage').textContent = 'Authentication token is required';
+                        document.getElementById('errorResult').classList.remove('hidden');
+                        logError('Authentication token is required for cache invalidation test');
+                        return;
+                    }
+
+                    logInfo('Starting cache invalidation test');
+
+                    const {
+                        subscriptionStatusEndpoint,
+                        usageEndpoint
+                    } = updateEndpoints();
+
+                    const results = [];
+
+                    try {
+                        // First request to subscription status
+                        logInfo('Step 1: Checking subscription status');
+                        const subscriptionResponse1 = await fetch(subscriptionStatusEndpoint, {
+                            headers: {
+                                'Authorization': `Bearer ${authToken}`
+                            }
+                        });
+
+                        const subscriptionData1 = await subscriptionResponse1.json();
+                        results.push({
+                            step: 'Initial subscription status check',
+                            status: subscriptionResponse1.status,
+                            data: subscriptionData1
+                        });
+
+                        // First request to API usage
+                        logInfo('Step 2: Checking API usage');
+                        const usageResponse1 = await fetch(usageEndpoint, {
+                            headers: {
+                                'Authorization': `Bearer ${authToken}`
+                            }
+                        });
+
+                        const usageData1 = await usageResponse1.json();
+                        results.push({
+                            step: 'Initial API usage check',
+                            status: usageResponse1.status,
+                            data: usageData1
+                        });
+
+                        // Wait a bit to ensure cache expiration (if set to a very short time)
+                        logInfo('Step 3: Waiting 2 seconds to allow cache to expire');
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+
+                        // Second request to subscription status
+                        logInfo('Step 4: Checking subscription status again');
+                        const subscriptionResponse2 = await fetch(subscriptionStatusEndpoint, {
+                            headers: {
+                                'Authorization': `Bearer ${authToken}`
+                            }
+                        });
+
+                        const subscriptionData2 = await subscriptionResponse2.json();
+                        results.push({
+                            step: 'Second subscription status check',
+                            status: subscriptionResponse2.status,
+                            data: subscriptionData2
+                        });
+
+                        // Second request to API usage
+                        logInfo('Step 5: Checking API usage again');
+                        const usageResponse2 = await fetch(usageEndpoint, {
+                            headers: {
+                                'Authorization': `Bearer ${authToken}`
+                            }
+                        });
+
+                        const usageData2 = await usageResponse2.json();
+                        results.push({
+                            step: 'Second API usage check',
+                            status: usageResponse2.status,
+                            data: usageData2
+                        });
+
+                        // Display results
+                        document.getElementById('cacheInvalidationResponse').textContent = JSON.stringify(results, null, 2);
+                        document.getElementById('cacheInvalidationResult').classList.remove('hidden');
+                        logSuccess('Cache invalidation test completed');
+
+                        // Check if the data is different between the first and second requests
+                        const subscriptionChanged = JSON.stringify(subscriptionData1) !== JSON.stringify(subscriptionData2);
+                        const usageChanged = JSON.stringify(usageData1) !== JSON.stringify(usageData2);
+
+                        if (subscriptionChanged) {
+                            logInfo('Subscription data changed between requests -

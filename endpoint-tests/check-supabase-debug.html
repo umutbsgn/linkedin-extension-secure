@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Debug Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .success {
+            border-color: #4CAF50;
+            background-color: #E8F5E9;
+        }
+        
+        .error {
+            border-color: #F44336;
+            background-color: #FFEBEE;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        .endpoint {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-success {
+            background-color: #4CAF50;
+        }
+        
+        .status-error {
+            background-color: #F44336;
+        }
+        
+        .status-warning {
+            background-color: #FFC107;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+        }
+        
+        .section h3 {
+            margin-bottom: 10px;
+        }
+        
+        .detail-row {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        
+        .detail-label {
+            font-weight: bold;
+            width: 200px;
+        }
+        
+        .detail-value {
+            flex: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Supabase Debug Tester</h1>
+
+    <div class="card">
+        <h2>Configuration</h2>
+        <label for="vercelUrl">Vercel Backend URL:</label>
+        <input type="text" id="vercelUrl" value="https://linkedin-extension-secure-elew.vercel.app">
+
+        <label for="authToken">Authentication Token (Bearer):</label>
+        <div style="display: flex; margin-bottom: 10px;">
+            <input type="text" id="authToken" placeholder="Enter your Supabase auth token" style="flex: 1; margin-bottom: 0;">
+            <button id="loadTokenButton" style="margin-left: 10px; background-color: #2196F3;">Gespeicherten Token laden</button>
+        </div>
+
+        <div id="tokenStatus" style="margin-bottom: 10px; padding: 8px; border-radius: 4px; display: none;"></div>
+
+        <div style="margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px;">
+            <h3>Authentifizierungstoken:</h3>
+            <p>Für diese Tests wird ein gültiger Authentifizierungstoken benötigt.</p>
+            <p>Sie haben zwei Möglichkeiten, einen Token zu erhalten:</p>
+            <ol>
+                <li><a href="auth-token-generator.html" style="color: #2196F3;">Authentifizierungstoken generieren</a> - Melden Sie sich an oder registrieren Sie sich</li>
+                <li>Manuell einen Token eingeben, falls Sie bereits einen haben</li>
+            </ol>
+            <p><strong>Hinweis:</strong> Der Token ist temporär und läuft nach einiger Zeit ab.</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Test Supabase Debug Endpoint</h2>
+        <p>Endpoint: <span class="endpoint" id="debugEndpoint"></span></p>
+        <button id="testDebug">Test Supabase Debug Endpoint</button>
+
+        <div id="debugResult" class="hidden">
+            <h3>Result:</h3>
+            <div id="debugSummary" class="section">
+                <h3>Summary</h3>
+                <div class="detail-row">
+                    <div class="detail-label">User:</div>
+                    <div class="detail-value" id="userInfo"></div>
+                </div>
+            </div>
+
+            <div id="credentialsSection" class="section">
+                <h3>Credentials Check</h3>
+                <div id="credentialsDetails"></div>
+            </div>
+
+            <div id="tablesSection" class="section">
+                <h3>Tables Check</h3>
+                <div id="tablesDetails"></div>
+            </div>
+
+            <div id="rpcSection" class="section">
+                <h3>RPC Functions Check</h3>
+                <div id="rpcDetails"></div>
+            </div>
+
+            <h3>Raw Response:</h3>
+            <pre id="debugResponse"></pre>
+        </div>
+    </div>
+
+    <script>
+        // Update endpoints when the Vercel URL changes
+        function updateEndpoints() {
+            const vercelUrl = document.getElementById('vercelUrl').value;
+            const debugEndpoint = `${vercelUrl}/api/debug/check-supabase`;
+
+            document.getElementById('debugEndpoint').textContent = debugEndpoint;
+
+            return {
+                debugEndpoint
+            };
+        }
+
+        // Initial update
+        updateEndpoints();
+
+        // Add event listener for URL changes
+        document.getElementById('vercelUrl').addEventListener('input', updateEndpoints);
+
+        // Load token from local storage
+        document.getElementById('loadTokenButton').addEventListener('click', () => {
+            const token = localStorage.getItem('supabaseAuthToken');
+            const tokenStatus = document.getElementById('tokenStatus');
+
+            if (token) {
+                document.getElementById('authToken').value = token;
+                tokenStatus.textContent = 'Token erfolgreich geladen!';
+                tokenStatus.style.backgroundColor = '#E8F5E9';
+                tokenStatus.style.color = '#2E7D32';
+                tokenStatus.style.display = 'block';
+            } else {
+                tokenStatus.textContent = 'Kein gespeicherter Token gefunden. Bitte generieren Sie einen Token über den Link oben.';
+                tokenStatus.style.backgroundColor = '#FFEBEE';
+                tokenStatus.style.color = '#C62828';
+                tokenStatus.style.display = 'block';
+            }
+        });
+
+        // Check for token on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('supabaseAuthToken');
+            if (token) {
+                document.getElementById('authToken').value = token;
+                const tokenStatus = document.getElementById('tokenStatus');
+                tokenStatus.textContent = 'Token automatisch geladen!';
+                tokenStatus.style.backgroundColor = '#E8F5E9';
+                tokenStatus.style.color = '#2E7D32';
+                tokenStatus.style.display = 'block';
+            }
+        });
+
+        // Test Supabase Debug Endpoint
+        document.getElementById('testDebug').addEventListener('click', async() => {
+                    // Reset UI
+                    document.getElementById('debugResult').classList.add('hidden');
+                    document.getElementById('debugSummary').innerHTML = '<h3>Summary</h3>';
+                    document.getElementById('credentialsDetails').innerHTML = '';
+                    document.getElementById('tablesDetails').innerHTML = '';
+                    document.getElementById('rpcDetails').innerHTML = '';
+
+                    const {
+                        debugEndpoint
+                    } = updateEndpoints();
+                    const authToken = document.getElementById('authToken').value;
+
+                    if (!authToken) {
+                        alert('Authentication token is required');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(debugEndpoint, {
+                            headers: {
+                                'Authorization': `Bearer ${authToken}`
+                            }
+                        });
+
+                        const data = await response.json();
+                        document.getElementById('debugResponse').textContent = JSON.stringify(data, null, 2);
+                        document.getElementById('debugResult').classList.remove('hidden');
+
+                        // Display user info
+                        if (data.user) {
+                            document.getElementById('userInfo').textContent = `${data.user.email} (${data.user.id})`;
+                        }
+
+                        // Display credentials check
+                        if (data.credentialsCheck) {
+                            const credentialsDetails = document.getElementById('credentialsDetails');
+                            for (const [key, value] of Object.entries(data.credentialsCheck)) {
+                                const row = document.createElement('div');
+                                row.className = 'detail-row';
+
+                                const label = document.createElement('div');
+                                label.className = 'detail-label';
+                                label.textContent = key;
+
+                                const valueDiv = document.createElement('div');
+                                valueDiv.className = 'detail-value';
+
+                                const statusIndicator = document.createElement('span');
+                                statusIndicator.className = `status-indicator ${value.configured ? 'status-success' : 'status-error'}`;
+
+                                valueDiv.appendChild(statusIndicator);
+                                valueDiv.appendChild(document.createTextNode(`${value.configured ? 'Configured' : 'Not configured'} ${value.value ? `(${value.value})` : ''}`));
+                        
+                        row.appendChild(label);
+                        row.appendChild(valueDiv);
+                        credentialsDetails.appendChild(row);
+                    }
+                }
+
+                // Display tables check
+                if (data.tablesCheck) {
+                    const tablesDetails = document.getElementById('tablesDetails');
+                    for (const [key, value] of Object.entries(data.tablesCheck)) {
+                        const row = document.createElement('div');
+                        row.className = 'detail-row';
+                        
+                        const label = document.createElement('div');
+                        label.className = 'detail-label';
+                        label.textContent = key;
+                        
+                        const valueDiv = document.createElement('div');
+                        valueDiv.className = 'detail-value';
+                        
+                        const statusIndicator = document.createElement('span');
+                        statusIndicator.className = `status-indicator ${value.exists ? 'status-success' : 'status-error'}`;
+                        
+                        valueDiv.appendChild(statusIndicator);
+                        valueDiv.appendChild(document.createTextNode(`${value.exists ? 'Exists' : 'Does not exist'} ${value.error ? `(Error: ${value.error})` : ''}`));
+                        
+                        row.appendChild(label);
+                        row.appendChild(valueDiv);
+                        tablesDetails.appendChild(row);
+                    }
+                }
+
+                // Display RPC functions check
+                if (data.rpcCheck) {
+                    const rpcDetails = document.getElementById('rpcDetails');
+                    for (const [key, value] of Object.entries(data.rpcCheck)) {
+                        const row = document.createElement('div');
+                        row.className = 'detail-row';
+                        
+                        const label = document.createElement('div');
+                        label.className = 'detail-label';
+                        label.textContent = key;
+                        
+                        const valueDiv = document.createElement('div');
+                        valueDiv.className = 'detail-value';
+                        
+                        const statusIndicator = document.createElement('span');
+                        statusIndicator.className = `status-indicator ${value.exists ? 'status-success' : 'status-error'}`;
+                        
+                        valueDiv.appendChild(statusIndicator);
+                        valueDiv.appendChild(document.createTextNode(`${value.exists ? 'Exists' : 'Does not exist'} ${value.error ? `(Error: ${value.error})` : ''}`));
+                        
+                        row.appendChild(label);
+                        row.appendChild(valueDiv);
+                        rpcDetails.appendChild(row);
+                    }
+                }
+
+                if (response.ok) {
+                    document.getElementById('debugResult').classList.add('success');
+                } else {
+                    document.getElementById('debugResult').classList.add('error');
+                }
+            } catch (error) {
+                document.getElementById('debugResponse').textContent = error.message;
+                document.getElementById('debugResult').classList.remove('hidden');
+                document.getElementById('debugResult').classList.add('error');
+            }
+        });
+    </script>
+</body>
+
+</html>

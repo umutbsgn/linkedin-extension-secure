@@ -3,7 +3,16 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
-import { checkAndUpdateApiUsage } from '../utils/usage.js';
+import { checkAndUpdateApiUsage, shouldUseOwnApiKey, invalidateSubscriptionCache } from '../utils/usage.js';
+
+// Model mapping for Anthropic API
+const MODEL_MAPPING = {
+    'haiku-3.5': 'claude-3-haiku-20240307',
+    'sonnet-3.7': 'claude-3-5-sonnet-20241022'
+};
+
+// Default model if none is specified
+const DEFAULT_MODEL = 'haiku-3.5';
 
 export default async function handler(req, res) {
     // Add CORS headers
@@ -30,10 +39,26 @@ export default async function handler(req, res) {
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     let userId = 'anonymous_user';
 
+    // Extract data from request
+    const { text, systemPrompt, model = DEFAULT_MODEL } = req.body;
+
+    if (!text) {
+        return res.status(400).json({ error: 'Missing required parameter: text' });
+    }
+
+    // Validate model
+    if (!MODEL_MAPPING[model]) {
+        return res.status(400).json({
+            error: 'Invalid model specified',
+            validModels: Object.keys(MODEL_MAPPING)
+        });
+    }
+
     // Start tracking the API call
     const startTime = trackApiCallStart('anthropic_messages', {
-        prompt_length: req.body.text ? req.body.text.length : 0,
-        system_prompt_length: req.body.systemPrompt ? req.body.systemPrompt.length : 0
+        prompt_length: text ? text.length : 0,
+        system_prompt_length: systemPrompt ? systemPrompt.length : 0,
+        model: model
     }, userId);
 
     try {
@@ -61,42 +86,95 @@ export default async function handler(req, res) {
 
         userId = user.id; // Update userId with actual user ID
 
-        // Check and update API usage
-        const { data: usageData, error: usageError } = await checkAndUpdateApiUsage(supabase, userId);
-
-        if (usageError) {
-            trackApiCallFailure('anthropic_messages', startTime, 'Error checking API usage', {}, user.email || userId);
-            return res.status(500).json({ error: 'Error checking API usage' });
+        // Invalidate the subscription cache for the user to ensure we get the latest data
+        try {
+            invalidateSubscriptionCache(userId);
+            console.log(`Invalidated subscription cache for user ${userId} before checking API usage`);
+        } catch (cacheError) {
+            console.error('Error invalidating subscription cache:', cacheError);
+            // Continue with the request even if cache invalidation fails
         }
 
-        if (!usageData.hasRemainingCalls) {
-            trackApiCallFailure('anthropic_messages', startTime, 'API call limit reached', {}, user.email || userId);
-            return res.status(403).json({
-                error: 'Monthly API call limit reached',
-                limit: 50,
-                used: usageData.callsCount,
-                resetDate: usageData.nextResetDate
-            });
+        // Check if user should use their own API key
+        console.log(`Checking if user ${userId} should use their own API key`);
+        let useOwnKey = false;
+        let userApiKey = null;
+
+        try {
+            const result = await shouldUseOwnApiKey(supabase, userId);
+            useOwnKey = result.useOwnKey;
+            userApiKey = result.apiKey;
+            console.log(`User ${userId} should use own API key: ${useOwnKey}`);
+        } catch (apiKeyError) {
+            console.error('Error checking if user should use own API key:', apiKeyError);
+            // Continue with default values (don't use own key)
         }
 
-        // Use the API key from environment variable instead of user settings
-        const apiKey = process.env.ANTHROPIC_API_KEY;
+        // Determine which API key to use
+        let apiKey;
+        let usingOwnKey = false;
+
+        if (useOwnKey && userApiKey) {
+            apiKey = userApiKey;
+            usingOwnKey = true;
+        } else {
+            // Check and update API usage
+            console.log(`Checking API usage for user ${userId} and model ${model}`);
+            let usageData = {
+                hasRemainingCalls: true, // Default to true to allow the call if there's an error
+                limit: 0,
+                callsCount: 0,
+                nextResetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString()
+            };
+
+            try {
+                const result = await checkAndUpdateApiUsage(supabase, userId, model);
+
+                if (result.error) {
+                    console.error('Detailed usage error in anthropic/analyze:', result.error);
+                    console.log('Continuing with default usage data due to error');
+                } else {
+                    usageData = result.data;
+                    console.log(`User ${userId} has ${usageData.callsCount} of ${usageData.limit} API calls for model ${model}`);
+                }
+            } catch (usageError) {
+                console.error('Unexpected error in checkAndUpdateApiUsage:', usageError);
+                console.log('Continuing with default usage data due to unexpected error');
+            }
+
+            if (!usageData.hasRemainingCalls) {
+                console.log(`User ${userId} has reached the API call limit for model ${model}`);
+                trackApiCallFailure('anthropic_messages', startTime, 'API call limit reached', { model }, user.email || userId);
+                return res.status(403).json({
+                    error: 'Monthly API call limit reached',
+                    limit: usageData.limit,
+                    used: usageData.callsCount,
+                    model: model,
+                    resetDate: usageData.nextResetDate,
+                    subscriptionOptions: {
+                        upgrade: true,
+                        useOwnKey: true
+                    }
+                });
+            }
+
+            // Use the API key from environment variable
+            apiKey = process.env.ANTHROPIC_API_KEY;
+        }
 
         if (!apiKey) {
+            console.error('Anthropic API key not configured. This is a critical error.');
             trackApiCallFailure('anthropic_messages', startTime,
-                'Anthropic API key not configured on server', {}, user.email || userId);
+                'Anthropic API key not configured', { model, usingOwnKey }, user.email || userId);
             return res.status(500).json({
-                error: 'Anthropic API key not configured on server'
+                error: 'Anthropic API key not configured',
+                details: 'The ANTHROPIC_API_KEY environment variable is not set in Vercel or the user has not provided their own API key.',
+                usingOwnKey: usingOwnKey
             });
         }
 
-        // Extract data from request
-        const { text, systemPrompt } = req.body;
-
-        if (!text) {
-            trackApiCallFailure('anthropic_messages', startTime, 'Missing required parameter: text', {}, user.email || userId);
-            return res.status(400).json({ error: 'Missing required parameter: text' });
-        }
+        // Map the model name to the actual Anthropic model ID
+        const anthropicModel = MODEL_MAPPING[model];
 
         // Call Anthropic API
         const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -108,7 +186,7 @@ export default async function handler(req, res) {
                 "anthropic-dangerous-direct-browser-access": "true" // Allow direct browser access
             },
             body: JSON.stringify({
-                model: "claude-3-5-sonnet-20241022",
+                model: anthropicModel,
                 max_tokens: 1024,
                 system: systemPrompt || "",
                 messages: [
@@ -121,8 +199,15 @@ export default async function handler(req, res) {
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             const errorMessage = errorData.error && errorData.error.message || response.statusText;
+
+            trackApiCallFailure('anthropic_messages', startTime,
+                `API call failed: ${response.status} - ${errorMessage}`, { model, usingOwnKey },
+                user.email || userId);
+
             return res.status(response.status).json({
-                error: `API call failed: ${response.status} - ${errorMessage}`
+                error: `API call failed: ${response.status} - ${errorMessage}`,
+                model: model,
+                usingOwnKey: usingOwnKey
             });
         }
 
@@ -133,15 +218,24 @@ export default async function handler(req, res) {
         const responseSize = JSON.stringify(data).length;
         trackApiCallSuccess('anthropic_messages', startTime, {
             response_size_bytes: responseSize,
-            content_length: data.content && data.content[0] && data.content[0].text ? data.content[0].text.length : 0
+            content_length: data.content && data.content[0] && data.content[0].text ? data.content[0].text.length : 0,
+            model: model,
+            usingOwnKey: usingOwnKey
         }, userId);
 
-        return res.status(200).json(data);
+        return res.status(200).json({
+            ...data,
+            model: model,
+            usingOwnKey: usingOwnKey
+        });
     } catch (error) {
         // Track failed API call
-        trackApiCallFailure('anthropic_messages', startTime, error.message, {}, userId);
+        trackApiCallFailure('anthropic_messages', startTime, error.message, { model }, userId);
 
         console.error('Error in Anthropic API proxy:', error);
-        return res.status(500).json({ error: error.message });
+        return res.status(500).json({
+            error: error.message,
+            model: model
+        });
     }
 }

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Configuration Checker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        
+        .success {
+            border-color: #4CAF50;
+            background-color: #E8F5E9;
+        }
+        
+        .error {
+            border-color: #F44336;
+            background-color: #FFEBEE;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        .endpoint {
+            font-family: monospace;
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Supabase Configuration Checker</h1>
+
+    <div class="card">
+        <h2>Configuration</h2>
+        <label for="vercelUrl">Vercel Backend URL:</label>
+        <input type="text" id="vercelUrl" value="https://linkedin-extension-secure-elew.vercel.app">
+    </div>
+
+    <button id="checkSupabaseUrl">Check Supabase URL</button>
+    <button id="checkSupabaseKey">Check Supabase Key</button>
+
+    <div id="loadingIndicator" class="card hidden">
+        <p>Checking configuration...</p>
+    </div>
+
+    <div id="supabaseUrlResult" class="card hidden">
+        <h2>Supabase URL Check</h2>
+        <pre id="supabaseUrlResponse"></pre>
+    </div>
+
+    <div id="supabaseKeyResult" class="card hidden">
+        <h2>Supabase Key Check</h2>
+        <pre id="supabaseKeyResponse"></pre>
+    </div>
+
+    <div id="errorResult" class="card error hidden">
+        <h2>❌ Check Failed</h2>
+        <p>Error: <span id="errorMessage"></span></p>
+    </div>
+
+    <script>
+        // Get the Vercel URL
+        function getVercelUrl() {
+            return document.getElementById('vercelUrl').value;
+        }
+
+        // Check Supabase URL
+        document.getElementById('checkSupabaseUrl').addEventListener('click', async() => {
+            // Reset UI
+            document.getElementById('supabaseUrlResult').classList.add('hidden');
+            document.getElementById('errorResult').classList.add('hidden');
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+
+            const vercelUrl = getVercelUrl();
+            const supabaseUrlEndpoint = `${vercelUrl}/api/config/supabase-url`;
+
+            try {
+                const response = await fetch(supabaseUrlEndpoint);
+                document.getElementById('loadingIndicator').classList.add('hidden');
+
+                const data = await response.json();
+                document.getElementById('supabaseUrlResponse').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('supabaseUrlResult').classList.remove('hidden');
+
+                if (response.ok) {
+                    document.getElementById('supabaseUrlResult').classList.add('success');
+                } else {
+                    document.getElementById('supabaseUrlResult').classList.add('error');
+                }
+            } catch (error) {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorResult').classList.remove('hidden');
+            }
+        });
+
+        // Check Supabase Key
+        document.getElementById('checkSupabaseKey').addEventListener('click', async() => {
+            // Reset UI
+            document.getElementById('supabaseKeyResult').classList.add('hidden');
+            document.getElementById('errorResult').classList.add('hidden');
+            document.getElementById('loadingIndicator').classList.remove('hidden');
+
+            const vercelUrl = getVercelUrl();
+            const supabaseKeyEndpoint = `${vercelUrl}/api/config/supabase-key`;
+
+            try {
+                const response = await fetch(supabaseKeyEndpoint);
+                document.getElementById('loadingIndicator').classList.add('hidden');
+
+                const data = await response.json();
+                document.getElementById('supabaseKeyResponse').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('supabaseKeyResult').classList.remove('hidden');
+
+                if (response.ok) {
+                    document.getElementById('supabaseKeyResult').classList.add('success');
+                } else {
+                    document.getElementById('supabaseKeyResult').classList.add('error');
+                }
+            } catch (error) {
+                document.getElementById('loadingIndicator').classList.add('hidden');
+                document.getElementById('errorMessage').textContent = error.message;
+                document.getElementById('errorResult').classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+
+</html>
