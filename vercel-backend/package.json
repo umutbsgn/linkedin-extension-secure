@@ -3,20 +3,18 @@
     "version": "1.0.0",
     "description": "Secure backend proxy for browser extension API calls",
     "main": "index.js",
+    "type": "module",
     "scripts": {
-        "dev": "next dev",
-        "build": "next build",
-        "start": "next start",
-        "lint": "next lint"
+        "dev": "node index.js",
+        "build": "echo 'No build step required'",
+        "start": "node index.js"
     },
     "keywords": ["vercel", "proxy", "api", "security"],
     "author": "",
     "license": "ISC",
-    "type": "module",
     "dependencies": {
-        "next": "^15.2.0",
-        "node-fetch": "^3.3.2",
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0"
+        "express": "^4.18.2",
+        "cors": "^2.8.5",
+        "node-fetch": "^3.3.2"
     }
 }
