@@ -17,8 +17,8 @@ const modelLimitsCache = {
 // Cache for user subscription type
 const userSubscriptionCache = new Map();
 
-// Cache expiration time in milliseconds (5 minutes)
-const CACHE_EXPIRATION = 5 * 60 * 1000;
+// Cache expiration time in milliseconds (30 seconds)
+const CACHE_EXPIRATION = 30 * 1000;
 
 // Default model if none is specified
 const DEFAULT_MODEL = 'haiku-3.5';
@@ -35,8 +35,11 @@ export async function getUserSubscriptionType(supabase, userId) {
     const cachedData = userSubscriptionCache.get(userId);
 
     if (cachedData && now - cachedData.timestamp < CACHE_EXPIRATION) {
+        console.log(`Using cached subscription type for user ${userId}: ${cachedData.type}`);
         return cachedData.type;
     }
+
+    console.log(`Fetching subscription type for user ${userId} from database...`);
 
     try {
         // Try to get the subscription type from the database function
@@ -44,18 +47,24 @@ export async function getUserSubscriptionType(supabase, userId) {
 
         if (error) {
             console.error('Error getting user subscription type:', error);
+            console.log(`Returning default 'trial' subscription type for user ${userId} due to error`);
             return 'trial'; // Default fallback
         }
 
+        const subscriptionType = data || 'trial';
+        console.log(`Got subscription type for user ${userId} from database: ${subscriptionType}`);
+
         // Update cache
         userSubscriptionCache.set(userId, {
-            type: data || 'trial',
+            type: subscriptionType,
             timestamp: now
         });
+        console.log(`Updated subscription type cache for user ${userId}`);
 
-        return data || 'trial';
+        return subscriptionType;
     } catch (error) {
         console.error('Unexpected error in getUserSubscriptionType:', error);
+        console.log(`Returning default 'trial' subscription type for user ${userId} due to unexpected error`);
         return 'trial'; // Default fallback
     }
 }
@@ -128,31 +137,50 @@ export async function getModelLimit(supabase, userId, model = DEFAULT_MODEL) {
  * @returns {Promise<Object>} Result with useOwnKey and apiKey
  */
 export async function shouldUseOwnApiKey(supabase, userId) {
+    console.log(`Checking if user ${userId} should use own API key...`);
+
     try {
         const { data, error } = await supabase
             .from('user_subscriptions')
-            .select('use_own_api_key, own_api_key')
+            .select('use_own_api_key, own_api_key, status, subscription_type')
             .eq('user_id', userId)
             .eq('status', 'active')
             .order('created_at', { ascending: false })
             .limit(1)
             .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
-            console.error('Error checking if user should use own API key:', error);
+        if (error) {
+            if (error.code === 'PGRST116') { // PGRST116 is "no rows returned" error
+                console.log(`No active subscription found for user ${userId}`);
+            } else {
+                console.error('Error checking if user should use own API key:', error);
+            }
+            console.log(`User ${userId} will not use own API key (no active subscription or error)`);
             return { useOwnKey: false, apiKey: null };
         }
 
         if (!data) {
+            console.log(`No subscription data found for user ${userId}`);
             return { useOwnKey: false, apiKey: null };
         }
 
+        console.log(`Found subscription for user ${userId}:`, {
+            status: data.status,
+            subscription_type: data.subscription_type,
+            use_own_api_key: data.use_own_api_key,
+            has_api_key: !!data.own_api_key
+        });
+
+        const useOwnKey = data.use_own_api_key && data.own_api_key;
+        console.log(`User ${userId} should use own API key: ${useOwnKey}`);
+
         return {
-            useOwnKey: data.use_own_api_key && data.own_api_key,
+            useOwnKey: useOwnKey,
             apiKey: data.own_api_key
         };
     } catch (error) {
         console.error('Unexpected error in shouldUseOwnApiKey:', error);
+        console.log(`User ${userId} will not use own API key due to unexpected error`);
         return { useOwnKey: false, apiKey: null };
     }
 }
@@ -280,11 +308,15 @@ export async function getCurrentApiUsage(supabase, userId, model = DEFAULT_MODEL
     const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
 
     try {
+        console.log(`Getting API usage for user ${userId} and model ${model}`);
+
         // Check if user should use their own API key
         const { useOwnKey, apiKey } = await shouldUseOwnApiKey(supabase, userId);
+        console.log(`User ${userId} should use own API key: ${useOwnKey}`);
 
         // If user should use their own API key, return special data
         if (useOwnKey && apiKey) {
+            console.log(`User ${userId} is using their own API key`);
             return {
                 data: {
                     callsCount: 0,
@@ -300,6 +332,7 @@ export async function getCurrentApiUsage(supabase, userId, model = DEFAULT_MODEL
 
         // Get the model limit for this user
         const limit = await getModelLimit(supabase, userId, model);
+        console.log(`User ${userId} has a limit of ${limit} for model ${model}`);
 
         // Get the current usage
         const { data, error } = await supabase
@@ -310,13 +343,18 @@ export async function getCurrentApiUsage(supabase, userId, model = DEFAULT_MODEL
             .eq('model', model)
             .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
-            console.error('Error getting API usage:', error);
-            return { error };
+        if (error) {
+            if (error.code === 'PGRST116') { // PGRST116 is "no rows returned" error
+                console.log(`No usage data found for user ${userId} and model ${model}`);
+            } else {
+                console.error('Error getting API usage:', error);
+                return { error };
+            }
         }
 
         // If no entry exists, return default values
         if (!data) {
+            console.log(`Returning default usage data for user ${userId} and model ${model}`);
             return {
                 data: {
                     callsCount: 0,
@@ -328,6 +366,8 @@ export async function getCurrentApiUsage(supabase, userId, model = DEFAULT_MODEL
                 }
             };
         }
+
+        console.log(`User ${userId} has used ${data.calls_count} calls for model ${model}`);
 
         // Return the current usage
         return {

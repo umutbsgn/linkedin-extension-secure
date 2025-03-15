@@ -194,6 +194,7 @@ document.addEventListener('DOMContentLoaded', async() => {
     // Function to load API usage data
     async function loadApiUsage() {
         try {
+            console.log('Loading API usage data...');
             const result = await chrome.storage.local.get(['supabaseAuthToken']);
             const session = await supabase.auth.getSession();
 
@@ -204,45 +205,37 @@ document.addEventListener('DOMContentLoaded', async() => {
                 return null;
             }
 
+            console.log('Fetching API usage with token:', token.substring(0, 10) + '...');
             const response = await fetch(API_ENDPOINTS.USAGE, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
             });
 
+            console.log('API usage response status:', response.status);
+
             if (!response.ok) {
                 console.error('Failed to fetch API usage:', response.status, response.statusText);
 
-                // If we get a 500 error, assume the user is a pro user and return unlimited usage
-                if (response.status === 500) {
-                    console.log('Assuming pro user due to server error, showing unlimited usage');
-                    return {
-                        callsCount: 0,
-                        limit: 9999,
-                        hasRemainingCalls: true,
-                        nextResetDate: "2099-12-31",
-                        useOwnKey: true,
-                        model: "sonnet-3.7"
-                    };
+                // Log response body for debugging
+                try {
+                    const errorText = await response.text();
+                    console.error('Error response body:', errorText);
+                } catch (e) {
+                    console.error('Could not read error response body:', e);
                 }
 
+                // Return null instead of assuming pro status
                 return null;
             }
 
-            return await response.json();
+            const usageData = await response.json();
+            console.log('API usage data received:', usageData);
+            return usageData;
         } catch (error) {
             console.error('Error loading API usage:', error);
-
-            // If there's an error, assume the user is a pro user and return unlimited usage
-            console.log('Assuming pro user due to error, showing unlimited usage');
-            return {
-                callsCount: 0,
-                limit: 9999,
-                hasRemainingCalls: true,
-                nextResetDate: "2099-12-31",
-                useOwnKey: true,
-                model: "sonnet-3.7"
-            };
+            // Return null instead of assuming pro status
+            return null;
         }
     }
 
@@ -263,7 +256,8 @@ document.addEventListener('DOMContentLoaded', async() => {
         const { callsCount, limit, hasRemainingCalls, nextResetDate, useOwnKey } = usageData;
 
         // Check if user is a pro user or using their own API key
-        if (useOwnKey || limit >= 9999) {
+        // Only show unlimited if explicitly marked as useOwnKey
+        if (useOwnKey) {
             apiUsageElement.innerHTML = `
                 <div class="api-usage-container">
                     <div class="api-usage-header">

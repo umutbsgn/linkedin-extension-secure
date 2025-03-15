@@ -32,6 +32,9 @@ initSupabase().then(client => {
     supabase = client;
     console.log('Supabase client initialized');
 
+    // Test user_subscriptions table access
+    testUserSubscriptionsTable();
+
     // Initialize session after Supabase is ready
     if (supabase) {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -41,6 +44,115 @@ initSupabase().then(client => {
         });
     }
 });
+
+// Testfunktion zur Überprüfung der user_subscriptions-Tabelle
+async function testUserSubscriptionsTable() {
+    try {
+        if (!supabase) {
+            console.error('Cannot test user_subscriptions table: Supabase client not initialized');
+            return;
+        }
+
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            console.error('Cannot test user_subscriptions table: No active session');
+            return;
+        }
+
+        console.log('Testing user_subscriptions table access...');
+
+        // Versuche, die user_subscriptions-Tabelle abzufragen
+        const { data, error } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', session.user.id)
+            .single();
+
+        if (error) {
+            console.error('Error accessing user_subscriptions table:', error);
+
+            // Überprüfe, ob es sich um einen "no rows returned"-Fehler handelt
+            if (error.code === 'PGRST116') {
+                console.log('No subscription found for user, but table exists');
+            } else {
+                console.error('Possible table access issue or other database error');
+            }
+        } else {
+            console.log('Successfully accessed user_subscriptions table:', data);
+        }
+
+        // Teste auch die RPC-Funktion get_user_subscription_type
+        console.log('Testing get_user_subscription_type function...');
+        const { data: subscriptionType, error: rpcError } = await supabase
+            .rpc('get_user_subscription_type', { user_id: session.user.id });
+
+        if (rpcError) {
+            console.error('Error calling get_user_subscription_type:', rpcError);
+        } else {
+            console.log('User subscription type:', subscriptionType);
+        }
+
+        // Teste auch den Subscription Status Endpunkt
+        console.log('Testing subscription status endpoint...');
+        try {
+            const response = await fetch(API_ENDPOINTS.SUBSCRIPTION_STATUS, {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`
+                }
+            });
+
+            console.log('Subscription status response status:', response.status);
+
+            if (!response.ok) {
+                console.error('Failed to fetch subscription status:', response.status, response.statusText);
+
+                // Log response body for debugging
+                try {
+                    const errorText = await response.text();
+                    console.error('Error response body:', errorText);
+                } catch (e) {
+                    console.error('Could not read error response body:', e);
+                }
+            } else {
+                const subscriptionStatus = await response.json();
+                console.log('Subscription status:', subscriptionStatus);
+            }
+        } catch (error) {
+            console.error('Error fetching subscription status:', error);
+        }
+
+        // Teste auch den API Usage Endpunkt
+        console.log('Testing API usage endpoint...');
+        try {
+            const response = await fetch(API_ENDPOINTS.USAGE, {
+                headers: {
+                    'Authorization': `Bearer ${session.access_token}`
+                }
+            });
+
+            console.log('API usage response status:', response.status);
+
+            if (!response.ok) {
+                console.error('Failed to fetch API usage:', response.status, response.statusText);
+
+                // Log response body for debugging
+                try {
+                    const errorText = await response.text();
+                    console.error('Error response body:', errorText);
+                } catch (e) {
+                    console.error('Could not read error response body:', e);
+                }
+            } else {
+                const usageData = await response.json();
+                console.log('API usage data:', usageData);
+            }
+        } catch (error) {
+            console.error('Error fetching API usage:', error);
+        }
+    } catch (error) {
+        console.error('Unexpected error in testUserSubscriptionsTable:', error);
+    }
+}
 
 const ANTHROPIC_API_KEY = 'anthropicApiKey';
 
