@@ -1,0 +1,17 @@
+{
+    "version": 2,
+    "builds": [
+        { "src": "pages/**/*.js", "use": "@vercel/node" }
+    ],
+    "routes": [
+        { "src": "/api/(.*)", "dest": "/pages/api/$1" }
+    ],
+    "env": {
+        "ANTHROPIC_API_KEY": "@anthropic_api_key",
+        "POSTHOG_API_KEY": "@posthog_api_key",
+        "POSTHOG_API_HOST": "@posthog_api_host",
+        "SUPABASE_URL": "@supabase_url",
+        "SUPABASE_SERVICE_KEY": "@supabase_service_key",
+        "SUPABASE_ANON_KEY": "@supabase_anon_key"
+    }
+}
