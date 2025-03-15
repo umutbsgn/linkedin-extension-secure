@@ -1,7 +1,7 @@
 import { createClient } from './popup/supabase-client.js';
-import { POSTHOG_API_KEY, POSTHOG_API_HOST } from './popup/analytics.js';
+import { API_ENDPOINTS } from './config.js';
 
-// Direct implementation of trackEvent for background script
+// Implementation of trackEvent for background script using Vercel proxy
 async function trackEvent(eventName, properties = {}) {
     // Handle specific event types directly
     if (eventName === 'post_comment' || eventName === 'connection_message') {
@@ -48,33 +48,30 @@ async function trackEvent(eventName, properties = {}) {
         console.error('Error getting user email:', error);
     }
 
-    // Send directly to PostHog API
+    // Send to PostHog via Vercel proxy
     try {
-        fetch(`${POSTHOG_API_HOST}/capture/`, {
+        fetch(API_ENDPOINTS.POSTHOG, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                api_key: POSTHOG_API_KEY,
                 event: eventName,
                 properties: eventProperties,
-                distinct_id: userEmail || 'anonymous_user', // Use email if available, otherwise anonymous
-                timestamp: new Date().toISOString()
+                distinctId: userEmail || 'anonymous_user' // Use email if available, otherwise anonymous
             })
         }).catch(error => {
-            console.error(`Error sending event to PostHog: ${error}`);
+            console.error(`Error sending event to PostHog via proxy: ${error}`);
         });
 
-        console.log(`Event tracked directly from background: ${eventName}`, eventProperties);
+        console.log(`Event tracked via proxy from background: ${eventName}`, eventProperties);
     } catch (error) {
         console.error(`Error tracking event ${eventName}:`, error);
     }
 }
 
-const supabaseUrl = 'https://fslbhbywcxqmqhwdcgcl.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzbGJoYnl3Y3hxbXFod2RjZ2NsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzg0MTc2MTQsImV4cCI6MjA1Mzk5MzYxNH0.vOWNflNbXMjzvjVbNPDZdwQqt2jUFy0M2gnt-msWQMM';
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Supabase client
+const supabase = createClient();
 
 const ANTHROPIC_API_KEY = 'anthropicApiKey';
 
@@ -85,18 +82,6 @@ async function getApiKey() {
 
 async function callAnthropicAPI(prompt, systemPrompt) {
     const startTime = Date.now();
-    const apiKey = await getApiKey();
-    if (!apiKey) {
-        throw new Error('API key not found. Please set your Anthropic API key in the extension options.');
-    }
-
-    // Additional validation of the API key
-    if (!apiKey.startsWith('sk-ant-api')) {
-        throw new Error('Invalid API key format. Please check your Anthropic API key.');
-    }
-
-    // Migrate old API key if exists
-    await migrateOldApiKey();
 
     // Track API call
     trackEvent('API_Call', {
@@ -106,21 +91,15 @@ async function callAnthropicAPI(prompt, systemPrompt) {
     });
 
     try {
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
+        // Statt direktem Anthropic-API-Aufruf, über Vercel-Proxy senden
+        const response = await fetch(API_ENDPOINTS.ANTHROPIC, {
             method: "POST",
             headers: {
-                "x-api-key": apiKey,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-                "anthropic-dangerous-direct-browser-access": "true"
+                "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: "claude-3-5-sonnet-20241022",
-                max_tokens: 1024,
-                system: systemPrompt,
-                messages: [
-                    { role: "user", content: prompt }
-                ]
+                text: prompt,
+                systemPrompt: systemPrompt
             })
         });
 
@@ -128,7 +107,7 @@ async function callAnthropicAPI(prompt, systemPrompt) {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            const errorMessage = errorData.error && errorData.error.message || response.statusText;
+            const errorMessage = errorData.error || response.statusText;
 
             // Track API call failure
             trackEvent('API_Call_Failure', {
@@ -264,19 +243,29 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 async function getCommentSystemPrompt() {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            throw new Error('No active session');
-        }
-        const userId = session.user.id;
-        const { data, error } = await supabase
-            .from('user_settings')
-            .select('system_prompt')
-            .eq('user_id', userId)
-            .single();
+        const response = await fetch(API_ENDPOINTS.SUPABASE, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                path: '/rest/v1/user_settings',
+                method: 'GET',
+                query: 'select=system_prompt',
+                useServiceKey: true
+            })
+        });
 
-        if (error) throw error;
-        return data.system_prompt;
+        if (!response.ok) {
+            throw new Error('Failed to fetch comment system prompt');
+        }
+
+        const data = await response.json();
+        if (!data || !data.length) {
+            throw new Error('No system prompt found');
+        }
+
+        return data[0].system_prompt;
     } catch (error) {
         console.error('Error fetching comment system prompt:', error);
         throw error;
@@ -285,26 +274,31 @@ async function getCommentSystemPrompt() {
 
 async function getConnectSystemPrompt() {
     try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-            throw new Error('No active session');
+        const response = await fetch(API_ENDPOINTS.SUPABASE, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                path: '/rest/v1/user_settings',
+                method: 'GET',
+                query: 'select=connect_system_prompt',
+                useServiceKey: true
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch connect system prompt');
         }
-        const userId = session.user.id;
-        const { data, error } = await supabase
-            .from('user_settings')
-            .select('connect_system_prompt')
-            .eq('user_id', userId)
-            .single();
 
-        if (error) throw error;
-
-        if (data && data.connect_system_prompt) {
-            console.log('Retrieved connect system prompt from Supabase:', data.connect_system_prompt);
-            return data.connect_system_prompt;
-        } else {
+        const data = await response.json();
+        if (!data || !data.length || !data[0].connect_system_prompt) {
             console.log('No custom connect system prompt found, using default');
             return DEFAULT_CONNECT_SYSTEM_PROMPT;
         }
+
+        console.log('Retrieved connect system prompt from Supabase:', data[0].connect_system_prompt);
+        return data[0].connect_system_prompt;
     } catch (error) {
         console.error('Error fetching connect system prompt:', error);
         console.log('Using default connect system prompt due to error');
@@ -314,11 +308,6 @@ async function getConnectSystemPrompt() {
 
 // Initialize Supabase session and migrate old API key
 chrome.runtime.onInstalled.addListener(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-            chrome.storage.local.set({ supabaseAuthToken: session.access_token });
-        }
-    });
     migrateOldApiKey();
 });
 

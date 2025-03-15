@@ -1,0 +1,22 @@
+{
+    "name": "vercel-backend",
+    "version": "1.0.0",
+    "description": "Secure backend proxy for browser extension API calls",
+    "main": "index.js",
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "lint": "next lint"
+    },
+    "keywords": ["vercel", "proxy", "api", "security"],
+    "author": "",
+    "license": "ISC",
+    "type": "module",
+    "dependencies": {
+        "next": "^15.2.0",
+        "node-fetch": "^3.3.2",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    }
+}

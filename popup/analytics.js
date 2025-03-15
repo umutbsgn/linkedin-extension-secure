@@ -1,6 +1,5 @@
 // analytics.js
-export const POSTHOG_API_KEY = 'phc_7teyAeNgBjZ2rRuu1yiPP8mJn1lg7SjZ4hhiJgmV5ar';
-export const POSTHOG_API_HOST = 'https://eu.i.posthog.com';
+import { API_ENDPOINTS } from '../config.js';
 
 // Check if we're in a background script or content script/popup context
 const isBackgroundScript = typeof window === 'undefined';
@@ -44,32 +43,55 @@ export function initAnalytics(options = {}) {
         return;
     }
 
-    window.posthog.init(POSTHOG_API_KEY, {
-        api_host: POSTHOG_API_HOST,
-        person_profiles: 'identified_only',
-        ...options
-    });
-    console.log('PostHog Analytics initialized');
+    // Wir initialisieren PostHog nicht mehr direkt, da wir den Proxy verwenden
+    console.log('PostHog Analytics initialized via proxy');
 }
-
 
 /**
  * Captures a generic event.
  */
 export function trackEvent(eventName, properties = {}) {
     try {
-        const posthog = getPostHog();
-
         const eventProperties = {
             timestamp: new Date().toISOString(),
             context: isBackgroundScript ? 'background' : 'content_or_popup',
             ...properties
         };
 
-        posthog.capture(eventName, eventProperties);
-        console.log(`Event tracked: ${eventName}`, eventProperties);
+        // Senden der Anfrage an den Vercel-Proxy
+        fetch(API_ENDPOINTS.POSTHOG, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                event: eventName,
+                properties: eventProperties,
+                distinctId: getUserId() || 'anonymous_user'
+            })
+        }).catch(error => {
+            console.error(`Error sending event to PostHog via proxy: ${error}`);
+        });
+
+        console.log(`Event tracked via proxy: ${eventName}`, eventProperties);
     } catch (error) {
         console.error(`Error tracking event ${eventName}:`, error);
+    }
+}
+
+// Hilfsfunktion zum Abrufen der Benutzer-ID
+function getUserId() {
+    try {
+        // Versuchen, die E-Mail-Adresse aus dem lokalen Speicher zu holen
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('userEmail')) {
+            return localStorage.getItem('userEmail');
+        }
+
+        // Fallback auf 'anonymous_user'
+        return 'anonymous_user';
+    } catch (error) {
+        console.error('Error getting user ID:', error);
+        return 'anonymous_user';
     }
 }
 
@@ -84,6 +106,10 @@ export function trackLoginAttempt(email, password) {
 
 // Successful login
 export function trackLoginSuccess(email) {
+    // Speichern der E-Mail für die Benutzeridentifikation
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('userEmail', email);
+    }
     trackEvent('Login_Success', { email });
 }
 
@@ -99,6 +125,10 @@ export function trackRegistrationAttempt(email, password) {
 
 // Successful registration
 export function trackRegistrationSuccess(email) {
+    // Speichern der E-Mail für die Benutzeridentifikation
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('userEmail', email);
+    }
     trackEvent('Registration_Success', { email });
 }
 
@@ -244,7 +274,9 @@ export function trackApiCallFailure(endpoint, error, statusCode) {
 export function trackSessionStart(email) {
     const sessionStartTime = Date.now();
     // Store the start time in localStorage
-    localStorage.setItem('session_start_time', sessionStartTime);
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('session_start_time', sessionStartTime);
+    }
 
     trackEvent('Session_Start', {
         email: email,
@@ -254,6 +286,10 @@ export function trackSessionStart(email) {
 
 // Track session end
 export function trackSessionEnd() {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+
     const sessionStartTime = parseInt(localStorage.getItem('session_start_time') || '0');
     if (sessionStartTime) {
         const sessionDuration = Date.now() - sessionStartTime;
@@ -322,125 +358,75 @@ export function trackOperationTime(operationName, durationMs, context = {}) {
 
 // User identification (after successful login)
 export function identifyUser(userId, userProperties = {}) {
-    if (isBackgroundScript) {
-        console.log(`User identification skipped in background script for: ${userId}`);
-        return;
+    // Speichern der Benutzer-ID
+    if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('userEmail', userId);
     }
 
-    const posthog = getPostHog();
-    posthog.identify(userId);
-
-    // Set user properties if provided
-    if (Object.keys(userProperties).length > 0) {
-        posthog.people.set(userProperties);
-    }
+    // Senden des Identifikationsereignisses
+    trackEvent('User_Identified', {
+        user_id: userId,
+        ...userProperties
+    });
 
     console.log(`User identified: ${userId}`, userProperties);
 }
 
 // Alias for switching from anonymous to identified user
 export function aliasUser(newId) {
-    if (isBackgroundScript) {
-        console.log(`User alias skipped in background script for: ${newId}`);
-        return;
-    }
-
-    const posthog = getPostHog();
-    posthog.alias(newId);
+    trackEvent('User_Aliased', {
+        new_id: newId
+    });
     console.log(`User aliased: ${newId}`);
 }
 
 // Identify user with Supabase data
 export async function identifyUserWithSupabase(supabase, userId) {
     try {
-        // Get user data from Supabase
-        const { data, error } = await supabase
-            .from('users')
-            .select('email, created_at, last_login, user_metadata')
-            .eq('id', userId)
-            .single();
+        // Get user data from Supabase via proxy
+        const response = await fetch(API_ENDPOINTS.SUPABASE, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                path: `/rest/v1/users?id=eq.${userId}&select=email,created_at,last_login,user_metadata`,
+                method: 'GET',
+                useServiceKey: true
+            })
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+            throw new Error(`Failed to fetch user data: ${response.status}`);
+        }
 
-        if (data && data.email) {
-            // Get additional user data if available
-            let additionalData = {};
-            try {
-                const { data: userData, error: userError } = await supabase
-                    .from('user_settings')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .single();
+        const data = await response.json();
 
-                if (!userError && userData) {
-                    additionalData = userData;
-                }
-            } catch (settingsError) {
-                console.error('Error fetching user settings:', settingsError);
-                // Continue with basic identification even if settings fetch fails
+        if (data && data.length > 0 && data[0].email) {
+            const userData = data[0];
+
+            // Speichern der E-Mail für die Benutzeridentifikation
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('userEmail', userData.email);
             }
 
-            // Get usage statistics if available
-            let usageStats = {};
-            try {
-                const { data: activityData, error: activityError } = await supabase
-                    .from('user_activity')
-                    .select('comment_count, connection_count, last_active')
-                    .eq('user_id', userId)
-                    .single();
-
-                if (!activityError && activityData) {
-                    usageStats = activityData;
-                }
-            } catch (activityError) {
-                console.error('Error fetching user activity:', activityError);
-                // Continue with basic identification even if activity fetch fails
-            }
-
-            // Set comprehensive user properties in PostHog
+            // Set comprehensive user properties
             const userProperties = {
-                // Standard PostHog properties
-                $email: data.email,
-                email: data.email, // Keep for backward compatibility
-                $name: data.user_metadata ? data.user_metadata.full_name : data.email.split('@')[0],
-                $created: data.created_at,
-
-                // Account information
-                last_login: data.last_login || new Date().toISOString(),
+                email: userData.email,
+                created_at: userData.created_at,
+                last_login: userData.last_login || new Date().toISOString(),
                 supabase_id: userId,
-                account_type: additionalData.account_type || 'standard',
-                api_key_set: !!additionalData.api_key,
-
-                // Usage metrics
-                comment_count: usageStats.comment_count || 0,
-                connection_messages_sent: usageStats.connection_count || 0,
-                last_active: usageStats.last_active || data.last_login || new Date().toISOString(),
-
-                // Device information
-                browser: navigator.userAgent.match(/Chrome|Firefox|Safari|Edge|Opera/) ? navigator.userAgent.match(/Chrome|Firefox|Safari|Edge|Opera/)[0] : 'Unknown',
-                device_type: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
-
-                // Other useful properties
-                email_domain: data.email.split('@')[1],
-
                 // Include any user metadata
-                ...data.user_metadata
+                ...userData.user_metadata
             };
 
-            // Identify user with their email as the distinct ID
-            identifyUser(data.email, userProperties);
-
-            // Also alias the user ID to the email for complete tracking
-            aliasUser(data.email);
-
-            // Set a PostHog event to update person profile
-            trackEvent('Person_Profile_Updated', {
-                email: data.email,
-                update_source: 'login',
-                properties_count: Object.keys(userProperties).length
+            // Senden des Identifikationsereignisses
+            trackEvent('User_Identified', {
+                user_id: userData.email,
+                ...userProperties
             });
 
-            console.log('User identified with email in PostHog:', data.email);
+            console.log('User identified with email:', userData.email);
             return true;
         }
 
@@ -453,14 +439,13 @@ export async function identifyUserWithSupabase(supabase, userId) {
 
 // Reset tracking (e.g., on logout)
 export function resetTracking() {
-    if (isBackgroundScript) {
-        console.log('PostHog reset skipped in background script');
-        return;
+    if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('userEmail');
+        localStorage.removeItem('session_start_time');
     }
 
-    const posthog = getPostHog();
-    posthog.reset();
-    console.log('PostHog tracking reset');
+    trackEvent('Tracking_Reset');
+    console.log('Tracking reset');
 }
 
 /**
