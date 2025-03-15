@@ -170,9 +170,7 @@ export async function getSubscriptionStatus(token) {
         return await response.json();
     } catch (error) {
         console.error('Error getting subscription status:', error);
-
         // Return a default subscription status for trial users
-        // This is just a fallback for UI display, the actual status is always determined by the server
         return {
             subscriptionType: 'trial',
             hasActiveSubscription: false,

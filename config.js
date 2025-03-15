@@ -59,10 +59,3 @@ export const SUBSCRIPTION_TYPES = {
     TRIAL: 'trial',
     PRO: 'pro'
 };
-
-// Ensure consistent case for subscription types
-// This helps prevent issues with case-sensitive comparisons
-export const NORMALIZED_SUBSCRIPTION_TYPES = {
-    trial: 'trial',
-    pro: 'pro'
-};

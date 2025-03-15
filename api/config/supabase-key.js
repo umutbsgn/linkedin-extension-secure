@@ -1,5 +1,5 @@
 // api/config/supabase-key.js
-// Endpoint to securely provide the Supabase service key
+// Endpoint to securely provide the Supabase anon key
 
 export default function handler(req, res) {
     // Only allow GET requests
@@ -7,13 +7,13 @@ export default function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    // Get the Supabase service key from environment variables
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+    // Get the Supabase anon key from environment variables
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseKey) {
-        return res.status(500).json({ error: 'Supabase service key not configured' });
+        return res.status(500).json({ error: 'Supabase anon key not configured' });
     }
 
-    // Return the Supabase service key
+    // Return the Supabase anon key
     return res.status(200).json({ key: supabaseKey });
 }

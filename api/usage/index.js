@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
-import { getCurrentApiUsage, invalidateSubscriptionCache, getAllApiUsage } from '../utils/usage.js';
+import { getCurrentApiUsage } from '../utils/usage.js';
 
 export default async function handler(req, res) {
     // Add CORS headers
@@ -58,49 +58,19 @@ export default async function handler(req, res) {
 
         userId = user.id; // Update userId with actual user ID
 
-        // Invalidate the subscription cache for the user to ensure we get the latest data
-        try {
-            invalidateSubscriptionCache(userId);
-            console.log(`Invalidated subscription cache for user ${userId} before retrieving API usage`);
-        } catch (cacheError) {
-            console.error('Error invalidating subscription cache:', cacheError);
-            // Continue with the request even if cache invalidation fails
-        }
-
         // Get the current API usage for the user
-        try {
-            console.log(`Getting API usage for user ${userId}`);
+        const { data: usageData, error: usageError } = await getCurrentApiUsage(supabase, userId);
 
-            // Use getAllApiUsage instead of getCurrentApiUsage to get usage for all models
-            const { data: usageData, error: usageError } = await getAllApiUsage(supabase, userId);
-
-            if (usageError) {
-                console.error('Detailed usage error:', usageError);
-                trackApiCallFailure('api_usage', startTime, `Error retrieving API usage: ${usageError.message || JSON.stringify(usageError)}`, {}, userId);
-                return res.status(500).json({
-                    error: 'Error retrieving API usage',
-                    details: usageError.message || JSON.stringify(usageError),
-                    errorCode: usageError.code
-                });
-            }
-
-            // Track successful API call
-            trackApiCallSuccess('api_usage', startTime, {}, userId);
-
-            console.log(`Successfully retrieved API usage for user ${userId}`);
-
-            // Return the API usage data
-            return res.status(200).json(usageData);
-        } catch (usageError) {
-            console.error('Unexpected error in getAllApiUsage:', usageError);
-            trackApiCallFailure('api_usage', startTime, `Unexpected error in getAllApiUsage: ${usageError.message}`, {}, userId);
-            return res.status(500).json({
-                error: 'Unexpected error retrieving API usage',
-                details: usageError.message,
-                stack: usageError.stack
-            });
+        if (usageError) {
+            trackApiCallFailure('api_usage', startTime, 'Error retrieving API usage', {}, userId);
+            return res.status(500).json({ error: 'Error retrieving API usage' });
         }
 
+        // Track successful API call
+        trackApiCallSuccess('api_usage', startTime, {}, userId);
+
+        // Return the API usage data
+        return res.status(200).json(usageData);
     } catch (error) {
         // Track failed API call
         trackApiCallFailure('api_usage', startTime, error.message, {}, userId);

@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
-import { getUserSubscriptionType, invalidateSubscriptionCache } from '../utils/usage.js';
+import { getUserSubscriptionType } from '../utils/usage.js';
 
 export default async function handler(req, res) {
     // Add CORS headers
@@ -58,27 +58,8 @@ export default async function handler(req, res) {
 
         userId = user.id; // Update userId with actual user ID
 
-        // Invalidate the subscription cache for the user to ensure we get the latest data
-        try {
-            invalidateSubscriptionCache(userId);
-            console.log(`Invalidated subscription cache for user ${userId} before checking subscription status`);
-        } catch (cacheError) {
-            console.error('Error invalidating subscription cache:', cacheError);
-            // Continue with the request even if cache invalidation fails
-        }
-
         // Get the subscription type
-        console.log(`Getting subscription type for user ${userId}`);
-        let subscriptionType;
-        try {
-            subscriptionType = await getUserSubscriptionType(supabase, userId);
-            console.log(`User ${userId} has subscription type: ${subscriptionType}`);
-        } catch (subscriptionError) {
-            console.error('Error getting subscription type:', subscriptionError);
-            // Default to trial if there's an error
-            subscriptionType = 'trial';
-            console.log(`Defaulting to trial subscription for user ${userId} due to error`);
-        }
+        const subscriptionType = await getUserSubscriptionType(supabase, userId);
 
         // Get the active subscription details
         let subscriptionData = null;

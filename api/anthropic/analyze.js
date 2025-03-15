@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
-import { checkAndUpdateApiUsage, shouldUseOwnApiKey, invalidateSubscriptionCache } from '../utils/usage.js';
+import { checkAndUpdateApiUsage, shouldUseOwnApiKey } from '../utils/usage.js';
 
 // Model mapping for Anthropic API
 const MODEL_MAPPING = {
@@ -86,29 +86,8 @@ export default async function handler(req, res) {
 
         userId = user.id; // Update userId with actual user ID
 
-        // Invalidate the subscription cache for the user to ensure we get the latest data
-        try {
-            invalidateSubscriptionCache(userId);
-            console.log(`Invalidated subscription cache for user ${userId} before checking API usage`);
-        } catch (cacheError) {
-            console.error('Error invalidating subscription cache:', cacheError);
-            // Continue with the request even if cache invalidation fails
-        }
-
         // Check if user should use their own API key
-        console.log(`Checking if user ${userId} should use their own API key`);
-        let useOwnKey = false;
-        let userApiKey = null;
-
-        try {
-            const result = await shouldUseOwnApiKey(supabase, userId);
-            useOwnKey = result.useOwnKey;
-            userApiKey = result.apiKey;
-            console.log(`User ${userId} should use own API key: ${useOwnKey}`);
-        } catch (apiKeyError) {
-            console.error('Error checking if user should use own API key:', apiKeyError);
-            // Continue with default values (don't use own key)
-        }
+        const { useOwnKey, apiKey: userApiKey } = await shouldUseOwnApiKey(supabase, userId);
 
         // Determine which API key to use
         let apiKey;
@@ -119,31 +98,14 @@ export default async function handler(req, res) {
             usingOwnKey = true;
         } else {
             // Check and update API usage
-            console.log(`Checking API usage for user ${userId} and model ${model}`);
-            let usageData = {
-                hasRemainingCalls: true, // Default to true to allow the call if there's an error
-                limit: 0,
-                callsCount: 0,
-                nextResetDate: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString()
-            };
+            const { data: usageData, error: usageError } = await checkAndUpdateApiUsage(supabase, userId, model);
 
-            try {
-                const result = await checkAndUpdateApiUsage(supabase, userId, model);
-
-                if (result.error) {
-                    console.error('Detailed usage error in anthropic/analyze:', result.error);
-                    console.log('Continuing with default usage data due to error');
-                } else {
-                    usageData = result.data;
-                    console.log(`User ${userId} has ${usageData.callsCount} of ${usageData.limit} API calls for model ${model}`);
-                }
-            } catch (usageError) {
-                console.error('Unexpected error in checkAndUpdateApiUsage:', usageError);
-                console.log('Continuing with default usage data due to unexpected error');
+            if (usageError) {
+                trackApiCallFailure('anthropic_messages', startTime, 'Error checking API usage', { model }, user.email || userId);
+                return res.status(500).json({ error: 'Error checking API usage' });
             }
 
             if (!usageData.hasRemainingCalls) {
-                console.log(`User ${userId} has reached the API call limit for model ${model}`);
                 trackApiCallFailure('anthropic_messages', startTime, 'API call limit reached', { model }, user.email || userId);
                 return res.status(403).json({
                     error: 'Monthly API call limit reached',
@@ -163,13 +125,10 @@ export default async function handler(req, res) {
         }
 
         if (!apiKey) {
-            console.error('Anthropic API key not configured. This is a critical error.');
             trackApiCallFailure('anthropic_messages', startTime,
                 'Anthropic API key not configured', { model, usingOwnKey }, user.email || userId);
             return res.status(500).json({
-                error: 'Anthropic API key not configured',
-                details: 'The ANTHROPIC_API_KEY environment variable is not set in Vercel or the user has not provided their own API key.',
-                usingOwnKey: usingOwnKey
+                error: 'Anthropic API key not configured'
             });
         }
 

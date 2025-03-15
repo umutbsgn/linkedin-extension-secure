@@ -5,7 +5,6 @@ import { createClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import { getStripeSecretKey, getStripeWebhookSecret } from '../config/stripe-keys.js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
-import { invalidateSubscriptionCache } from '../utils/usage.js';
 
 export default async function handler(req, res) {
     // Only allow POST requests
@@ -113,10 +112,6 @@ export default async function handler(req, res) {
                         return res.status(500).json({ error: `Error creating subscription entry: ${insertError.message}` });
                     }
 
-                    // Invalidate the subscription cache for the user
-                    invalidateSubscriptionCache(userId);
-                    console.log(`Invalidated subscription cache for user ${userId} after checkout completion`);
-
                     break;
                 }
             case 'customer.subscription.updated':
@@ -139,19 +134,6 @@ export default async function handler(req, res) {
                         return res.status(500).json({ error: `Error updating subscription entry: ${updateError.message}` });
                     }
 
-                    // Get the user ID from the subscription
-                    const { data: subscriptionData, error: subscriptionError } = await supabase
-                    .from('user_subscriptions')
-                    .select('user_id')
-                    .eq('stripe_subscription_id', subscription.id)
-                    .single();
-
-                    if (!subscriptionError && subscriptionData) {
-                        // Invalidate the subscription cache for the user
-                        invalidateSubscriptionCache(subscriptionData.user_id);
-                        console.log(`Invalidated subscription cache for user ${subscriptionData.user_id} after subscription update`);
-                    }
-
                     break;
                 }
             case 'customer.subscription.deleted':
@@ -170,19 +152,6 @@ export default async function handler(req, res) {
                     if (updateError) {
                         trackApiCallFailure('stripe_webhook', startTime, `Error updating subscription entry: ${updateError.message}`);
                         return res.status(500).json({ error: `Error updating subscription entry: ${updateError.message}` });
-                    }
-
-                    // Get the user ID from the subscription
-                    const { data: subscriptionData, error: subscriptionError } = await supabase
-                    .from('user_subscriptions')
-                    .select('user_id')
-                    .eq('stripe_subscription_id', subscription.id)
-                    .single();
-
-                    if (!subscriptionError && subscriptionData) {
-                        // Invalidate the subscription cache for the user
-                        invalidateSubscriptionCache(subscriptionData.user_id);
-                        console.log(`Invalidated subscription cache for user ${subscriptionData.user_id} after subscription deletion`);
                     }
 
                     break;

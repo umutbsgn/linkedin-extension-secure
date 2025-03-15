@@ -1,7 +1,7 @@
 // popup/subscription-manager.js
 // Component for managing subscriptions
 
-import { SUBSCRIPTION_TYPES, NORMALIZED_SUBSCRIPTION_TYPES, MODELS } from '../config.js';
+import { SUBSCRIPTION_TYPES, MODELS } from '../config.js';
 import {
     getSubscriptionStatus,
     redirectToCheckout,
@@ -91,7 +91,7 @@ export function createSubscriptionManager(container, supabase, showStatus, loadA
                 // Show loading state
                 this.content.innerHTML = '<div class="loading-message">Loading subscription status...</div>';
 
-                // Get the subscription status directly from the server
+                // Get the subscription status
                 this.status = await getSubscriptionStatus(session.access_token);
 
                 // Render the UI
@@ -128,27 +128,18 @@ export function createSubscriptionManager(container, supabase, showStatus, loadA
                 return;
             }
 
-            // Log the subscription status for debugging
-            console.log('Rendering subscription UI with status:', this.status);
-
-            // Directly use the subscription data from the API
             const { subscriptionType, hasActiveSubscription, useOwnApiKey, subscription } = this.status;
 
-            // Use normalized subscription types for case-insensitive comparison
-            const normalizedType = subscriptionType ? subscriptionType.toLowerCase() : '';
-            const isPro = normalizedType === NORMALIZED_SUBSCRIPTION_TYPES.pro;
-
             // Determine the subscription status text and class
-            const statusText = isPro ? 'Pro' : 'Free Trial';
-            const statusClass = isPro ? 'pro' : 'trial';
-
-            // Log the determined subscription type
-            console.log(`Subscription type: ${subscriptionType}, isPro: ${isPro}, statusText: ${statusText}`);
-
+            let statusText = 'Free Trial';
+            let statusClass = 'trial';
             let featuresHtml = '';
             let actionsHtml = '';
 
-            if (isPro) {
+            if (subscriptionType === SUBSCRIPTION_TYPES.PRO) {
+                statusText = 'Pro';
+                statusClass = 'pro';
+
                 // Add features for Pro subscription
                 featuresHtml = `
                     <div class="subscription-features">

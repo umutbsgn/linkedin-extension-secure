@@ -17,20 +17,11 @@ const modelLimitsCache = {
 // Cache for user subscription type
 const userSubscriptionCache = new Map();
 
-// Cache expiration time in milliseconds (1 minute)
-const CACHE_EXPIRATION = 1 * 60 * 1000;
+// Cache expiration time in milliseconds (5 minutes)
+const CACHE_EXPIRATION = 5 * 60 * 1000;
 
 // Default model if none is specified
 const DEFAULT_MODEL = 'haiku-3.5';
-
-/**
- * Invalidates the subscription type cache for a user
- * @param {string} userId - User ID
- */
-export function invalidateSubscriptionCache(userId) {
-    console.log(`Invalidating subscription cache for user ${userId}`);
-    userSubscriptionCache.delete(userId);
-}
 
 /**
  * Gets the user's subscription type
@@ -85,19 +76,11 @@ export async function getUserSubscriptionType(supabase, userId) {
             return 'trial';
         }
 
-        // Log all subscriptions for debugging
-        console.log(`All subscriptions for user ${userId}:`, JSON.stringify(data));
-
         // Check for any subscription with type 'pro' (case insensitive)
-        const proSubscription = data.find(sub => {
-            // Ensure subscription_type exists and convert to lowercase for case-insensitive comparison
-            const subType = sub.subscription_type ? sub.subscription_type.toLowerCase() : '';
-            const isActive = sub.status === 'active';
-
-            console.log(`Checking subscription: type=${subType}, active=${isActive}, id=${sub.id}`);
-
-            return subType === 'pro' && isActive;
-        });
+        const proSubscription = data.find(sub =>
+            sub.subscription_type &&
+            sub.subscription_type.toLowerCase() === 'pro'
+        );
 
         if (proSubscription) {
             console.log(`Found pro subscription for user ${userId}:`, proSubscription.id);

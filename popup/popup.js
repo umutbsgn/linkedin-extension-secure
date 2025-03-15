@@ -210,12 +210,10 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             if (subscriptionResponse.ok) {
                 const subscriptionData = await subscriptionResponse.json();
-                // Use normalized subscription types for case-insensitive comparison
-                const normalizedType = subscriptionData.subscriptionType ? subscriptionData.subscriptionType.toLowerCase() : '';
-                isPro = normalizedType === NORMALIZED_SUBSCRIPTION_TYPES.pro;
+                isPro = subscriptionData.subscriptionType === 'pro';
                 useOwnApiKey = subscriptionData.useOwnApiKey;
 
-                console.log('Subscription status:', { subscriptionType: subscriptionData.subscriptionType, normalizedType, isPro, useOwnApiKey });
+                console.log('Subscription status:', { isPro, useOwnApiKey });
             }
 
             // Get API usage data
