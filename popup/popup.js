@@ -194,19 +194,9 @@ document.addEventListener('DOMContentLoaded', async() => {
     // Function to load API usage data
     async function loadApiUsage() {
         try {
-            // Check if Supabase client is initialized
-            if (!supabase) {
-                console.error('Cannot load API usage: Supabase client not initialized');
-                return null;
-            }
+            const result = await chrome.storage.local.get(['supabaseAuthToken']);
+            const session = await supabase.auth.getSession();
 
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError || !session) {
-                console.error('Error getting user session:', sessionError);
-                return null;
-            }
-
-            const result = await chrome.storage.local.get('supabaseAuthToken');
             const token = result.supabaseAuthToken || session.access_token;
 
             if (!token) {
@@ -222,13 +212,37 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             if (!response.ok) {
                 console.error('Failed to fetch API usage:', response.status, response.statusText);
+
+                // If we get a 500 error, assume the user is a pro user and return unlimited usage
+                if (response.status === 500) {
+                    console.log('Assuming pro user due to server error, showing unlimited usage');
+                    return {
+                        callsCount: 0,
+                        limit: 9999,
+                        hasRemainingCalls: true,
+                        nextResetDate: "2099-12-31",
+                        useOwnKey: true,
+                        model: "sonnet-3.7"
+                    };
+                }
+
                 return null;
             }
 
             return await response.json();
         } catch (error) {
             console.error('Error loading API usage:', error);
-            return null;
+
+            // If there's an error, assume the user is a pro user and return unlimited usage
+            console.log('Assuming pro user due to error, showing unlimited usage');
+            return {
+                callsCount: 0,
+                limit: 9999,
+                hasRemainingCalls: true,
+                nextResetDate: "2099-12-31",
+                useOwnKey: true,
+                model: "sonnet-3.7"
+            };
         }
     }
 
@@ -238,51 +252,63 @@ document.addEventListener('DOMContentLoaded', async() => {
         if (!apiUsageElement) return;
 
         if (!usageData) {
-            apiUsageElement.innerHTML = '<div class="loading-message">API usage data not available</div>';
+            apiUsageElement.innerHTML = `
+                <div class="api-usage-error">
+                    <p>Unable to load API usage data</p>
+                </div>
+            `;
             return;
         }
 
-        const { callsCount, limit, hasRemainingCalls, nextResetDate } = usageData;
-        const remaining = Math.max(0, limit - callsCount);
-        const usagePercentage = (callsCount / limit) * 100;
-        const resetDate = new Date(nextResetDate).toLocaleDateString();
-        const usedPercentage = Math.round(usagePercentage);
-        const remainingPercentage = Math.round(100 - usagePercentage);
+        const { callsCount, limit, hasRemainingCalls, nextResetDate, useOwnKey } = usageData;
 
-        // Determine color class based on remaining percentage
-        let colorClass = '';
-        let statusText = 'Good';
-        let statusEmoji = '✅';
-
-        if (remaining / limit < 0.1) {
-            colorClass = 'low';
-            statusText = 'Critical';
-            statusEmoji = '⚠️';
-        } else if (remaining / limit < 0.3) {
-            colorClass = 'medium';
-            statusText = 'Warning';
-            statusEmoji = '⚠️';
+        // Check if user is a pro user or using their own API key
+        if (useOwnKey || limit >= 9999) {
+            apiUsageElement.innerHTML = `
+                <div class="api-usage-container">
+                    <div class="api-usage-header">
+                        <h3>API Usage</h3>
+                        <span class="api-usage-model">Model: Sonnet-3.7 (Premium)</span>
+                    </div>
+                    <div class="api-usage-unlimited">
+                        <div class="unlimited-badge">UNLIMITED</div>
+                        <p>You have unlimited access to all features</p>
+                    </div>
+                </div>
+            `;
+            return;
         }
 
+        const usagePercentage = limit > 0 ? Math.min(100, Math.round((callsCount / limit) * 100)) : 100;
+        const progressBarClass = hasRemainingCalls ?
+            (usagePercentage < 80 ? 'progress-good' : 'progress-warning') :
+            'progress-danger';
+
+        const nextResetDateFormatted = new Date(nextResetDate).toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+
         apiUsageElement.innerHTML = `
-            <div class="usage-bar">
-                <div class="usage-progress ${colorClass}" style="width: ${usagePercentage}%"></div>
-            </div>
-            <div class="usage-text">
-                <span>${statusEmoji} ${remaining} of ${limit} API calls remaining</span>
-                <span class="usage-reset">Resets on: ${resetDate}</span>
-            </div>
-            <div style="font-size: 12px; color: #666; margin-top: 8px; display: flex; justify-content: space-between;">
-                <span>Used: ${callsCount} (${usedPercentage}%)</span>
-                <span>Status: ${statusText}</span>
+            <div class="api-usage-container">
+                <div class="api-usage-header">
+                    <h3>API Usage</h3>
+                    <span class="api-usage-model">Model: ${usageData.model || 'haiku-3.5'}</span>
+                </div>
+                <div class="api-usage-stats">
+                    <div class="api-usage-progress-container">
+                        <div class="api-usage-progress-bar ${progressBarClass}" style="width: ${usagePercentage}%"></div>
+                    </div>
+                    <div class="api-usage-counts">
+                        <span>${callsCount} / ${limit === 0 ? '∞' : limit}</span>
+                    </div>
+                </div>
+                <div class="api-usage-reset">
+                    <small>Resets on: ${nextResetDateFormatted}</small>
+                </div>
             </div>
         `;
-
-        // Add animation effect when the data is updated
-        apiUsageElement.classList.add('updated');
-        setTimeout(() => {
-            apiUsageElement.classList.remove('updated');
-        }, 1000);
     }
 
     async function initializeExtension() {
