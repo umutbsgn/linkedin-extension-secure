@@ -434,6 +434,703 @@ app.get('/api/usage', async(req, res) => {
     }
 });
 
+// Supabase auth login endpoint
+app.post('/api/supabase/auth/login', async(req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Sign in with email and password
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            return res.status(401).json({ error: error.message });
+        }
+
+        return res.status(200).json(data);
+    } catch (error) {
+        console.error('Error in Supabase login:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Supabase auth signup endpoint
+app.post('/api/supabase/auth/signup', async(req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Sign up with email and password
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password
+        });
+
+        if (error) {
+            return res.status(400).json({ error: error.message });
+        }
+
+        return res.status(200).json(data);
+    } catch (error) {
+        console.error('Error in Supabase signup:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Supabase proxy endpoint
+app.post('/api/supabase/proxy', async(req, res) => {
+    try {
+        // Extract data from request
+        const { path, method, body, useServiceKey, token } = req.body;
+
+        if (!path) {
+            return res.status(400).json({ error: 'Missing required parameter: path' });
+        }
+
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = useServiceKey ?
+            process.env.SUPABASE_SERVICE_KEY :
+            process.env.SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Prepare headers for the request
+        const headers = {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey
+        };
+
+        // Add authorization header if token is provided
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        // Construct the full URL
+        const url = `${supabaseUrl}${path}`;
+
+        // Make the request to Supabase
+        const response = await fetch(url, {
+            method: method || 'GET',
+            headers,
+            body: body ? JSON.stringify(body) : undefined
+        });
+
+        // Get the response data
+        const data = await response.json().catch(() => ({}));
+
+        // Return the response with the same status code
+        return res.status(response.status).json(data);
+    } catch (error) {
+        console.error('Error in Supabase proxy:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Subscription status endpoint
+app.get('/api/subscriptions/status', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let userId = 'anonymous_user';
+
+    try {
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        userId = user.id; // Update userId with actual user ID
+
+        // Check if user has an active subscription
+        const { data, error } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            console.error('Error checking subscription status:', error);
+            return res.status(500).json({ error: 'Error checking subscription status' });
+        }
+
+        // Determine subscription type
+        const subscriptionType = data ? 'pro' : 'trial';
+
+        // Check if user has own API key configured
+        const useOwnApiKey = data && data.use_own_api_key && data.own_api_key;
+
+        // Return the subscription status
+        return res.status(200).json({
+            subscriptionType,
+            hasActiveSubscription: !!data,
+            useOwnApiKey: !!useOwnApiKey,
+            subscription: data ? {
+                id: data.stripe_subscription_id,
+                status: data.status,
+                currentPeriodStart: data.current_period_start,
+                currentPeriodEnd: data.current_period_end
+            } : null
+        });
+    } catch (error) {
+        console.error('Error getting subscription status:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Create checkout session endpoint
+app.post('/api/subscriptions/create-checkout', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let userId = 'anonymous_user';
+
+    try {
+        // Get Stripe secret key and price ID
+        const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+        const stripePriceId = process.env.STRIPE_PRO_PRICE_ID;
+
+        if (!stripeSecretKey) {
+            return res.status(500).json({ error: 'Stripe secret key not configured' });
+        }
+
+        if (!stripePriceId) {
+            return res.status(500).json({ error: 'Stripe price ID not configured' });
+        }
+
+        // Initialize Stripe
+        const Stripe = require('stripe');
+        const stripe = new Stripe(stripeSecretKey);
+
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        userId = user.id; // Update userId with actual user ID
+
+        // Check if user already has an active subscription
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (subscriptionError && subscriptionError.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            return res.status(500).json({ error: 'Error checking subscription status' });
+        }
+
+        // If user already has an active subscription, return error
+        if (subscriptionData) {
+            return res.status(400).json({
+                error: 'You already have an active subscription',
+                subscription: {
+                    id: subscriptionData.stripe_subscription_id,
+                    status: subscriptionData.status,
+                    currentPeriodEnd: subscriptionData.current_period_end
+                }
+            });
+        }
+
+        // Get the success and cancel URLs from the request
+        const { successUrl, cancelUrl } = req.body;
+
+        if (!successUrl || !cancelUrl) {
+            return res.status(400).json({ error: 'Missing success or cancel URL' });
+        }
+
+        // Create a new checkout session
+        const session = await stripe.checkout.sessions.create({
+            payment_method_types: ['card'],
+            line_items: [{
+                price: stripePriceId,
+                quantity: 1,
+            }, ],
+            mode: 'subscription',
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            client_reference_id: userId,
+            customer_email: user.email,
+            metadata: {
+                userId: userId,
+                email: user.email
+            }
+        });
+
+        // Return the checkout session ID
+        return res.status(200).json({
+            sessionId: session.id,
+            url: session.url
+        });
+    } catch (error) {
+        console.error('Error creating checkout session:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Update API key endpoint
+app.post('/api/subscriptions/update-api-key', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let userId = 'anonymous_user';
+
+    try {
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        userId = user.id; // Update userId with actual user ID
+
+        // Check if user has a Pro subscription
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (subscriptionError && subscriptionError.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            return res.status(500).json({ error: 'Error checking subscription status' });
+        }
+
+        // Only Pro users can use their own API key
+        if (!subscriptionData) {
+            return res.status(403).json({
+                error: 'Only Pro users can use their own API key',
+                subscriptionType: 'trial'
+            });
+        }
+
+        // Get the API key and use flag from the request
+        const { apiKey, useOwnKey } = req.body;
+
+        if (useOwnKey && (!apiKey || apiKey.trim() === '')) {
+            return res.status(400).json({ error: 'API key is required when useOwnKey is true' });
+        }
+
+        // Update the subscription entry
+        const { error: updateError } = await supabase
+            .from('user_subscriptions')
+            .update({
+                use_own_api_key: useOwnKey,
+                own_api_key: apiKey,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', subscriptionData.id);
+
+        if (updateError) {
+            return res.status(500).json({ error: `Error updating subscription entry: ${updateError.message}` });
+        }
+
+        // Return success
+        return res.status(200).json({
+            success: true,
+            message: 'API key settings updated successfully',
+            useOwnKey
+        });
+    } catch (error) {
+        console.error('Error updating API key:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Cancel subscription endpoint
+app.post('/api/subscriptions/cancel', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let userId = 'anonymous_user';
+
+    try {
+        // Get Stripe secret key
+        const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
+        if (!stripeSecretKey) {
+            return res.status(500).json({ error: 'Stripe secret key not configured' });
+        }
+
+        // Initialize Stripe
+        const Stripe = require('stripe');
+        const stripe = new Stripe(stripeSecretKey);
+
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        userId = user.id; // Update userId with actual user ID
+
+        // Get the active subscription
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+            .from('user_subscriptions')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (subscriptionError && subscriptionError.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            return res.status(500).json({ error: 'Error getting subscription details' });
+        }
+
+        if (!subscriptionData) {
+            return res.status(404).json({ error: 'No active subscription found' });
+        }
+
+        // Check if this is a Stripe subscription or just a custom subscription
+        if (subscriptionData.stripe_subscription_id) {
+            // Cancel the subscription in Stripe
+            const subscription = await stripe.subscriptions.update(
+                subscriptionData.stripe_subscription_id, { cancel_at_period_end: true }
+            );
+
+            // Update the subscription in the database
+            const { error: updateError } = await supabase
+                .from('user_subscriptions')
+                .update({
+                    status: 'canceling',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', subscriptionData.id);
+
+            if (updateError) {
+                return res.status(500).json({ error: `Error updating subscription entry: ${updateError.message}` });
+            }
+
+            // Return success
+            return res.status(200).json({
+                success: true,
+                message: 'Subscription will be canceled at the end of the billing period',
+                subscription: {
+                    id: subscription.id,
+                    status: subscription.status,
+                    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+                    currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString()
+                }
+            });
+        } else {
+            // This is a custom subscription (e.g., for users using their own API key)
+            // Update the subscription in the database
+            const { error: updateError } = await supabase
+                .from('user_subscriptions')
+                .update({
+                    status: 'canceled',
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', subscriptionData.id);
+
+            if (updateError) {
+                return res.status(500).json({ error: `Error updating subscription entry: ${updateError.message}` });
+            }
+
+            // Return success
+            return res.status(200).json({
+                success: true,
+                message: 'Subscription has been canceled',
+                subscription: {
+                    id: subscriptionData.id,
+                    status: 'canceled'
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error canceling subscription:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// User settings endpoint
+app.get('/api/supabase/user-settings', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    try {
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        // Get user settings
+        const { data, error } = await supabase
+            .from('user_settings')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            return res.status(500).json({ error: 'Error retrieving user settings' });
+        }
+
+        // Return user settings or empty object if not found
+        return res.status(200).json(data || {});
+    } catch (error) {
+        console.error('Error retrieving user settings:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Update user settings endpoint
+app.post('/api/supabase/user-settings', async(req, res) => {
+    // Get authorization token from request headers
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Missing or invalid authorization token' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    try {
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_KEY; // Use service key for admin operations
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Verify the token and get user information
+        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+        if (authError || !user) {
+            return res.status(401).json({
+                error: authError ? authError.message : 'Invalid or expired token'
+            });
+        }
+
+        // Get the settings from the request body
+        const settings = req.body;
+        if (!settings) {
+            return res.status(400).json({ error: 'Settings are required' });
+        }
+
+        // Add user_id and updated_at to settings
+        const updatedSettings = {
+            ...settings,
+            user_id: user.id,
+            updated_at: new Date().toISOString()
+        };
+
+        // Check if user settings already exist
+        const { data: existingSettings, error: getError } = await supabase
+            .from('user_settings')
+            .select('id')
+            .eq('user_id', user.id)
+            .single();
+
+        if (getError && getError.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            return res.status(500).json({ error: 'Error checking existing user settings' });
+        }
+
+        let result;
+        if (existingSettings) {
+            // Update existing settings
+            result = await supabase
+                .from('user_settings')
+                .update(updatedSettings)
+                .eq('id', existingSettings.id)
+                .select();
+        } else {
+            // Insert new settings
+            result = await supabase
+                .from('user_settings')
+                .insert([updatedSettings])
+                .select();
+        }
+
+        if (result.error) {
+            return res.status(500).json({ error: 'Error saving user settings' });
+        }
+
+        // Return updated settings
+        return res.status(200).json(result.data[0]);
+    } catch (error) {
+        console.error('Error saving user settings:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+// Beta access check endpoint
+app.get('/api/supabase/beta-access', async(req, res) => {
+    try {
+        const { email } = req.query;
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email parameter is required' });
+        }
+
+        // Get Supabase credentials from environment variables
+        const supabaseUrl = process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ error: 'Supabase credentials not configured on server' });
+        }
+
+        // Initialize Supabase client
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        // Check if email is in beta whitelist
+        const { data, error } = await supabase
+            .from('beta_whitelist')
+            .select('*')
+            .eq('email', email.toLowerCase())
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+            return res.status(500).json({ error: 'Error checking beta access' });
+        }
+
+        // Return whether email is in whitelist
+        return res.status(200).json({ allowed: !!data });
+    } catch (error) {
+        console.error('Error checking beta access:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
 // Anthropic API proxy endpoint
 app.post('/api/anthropic/analyze', async(req, res) => {
     // Get authorization token from request headers
