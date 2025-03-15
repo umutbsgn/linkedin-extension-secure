@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Supabase Proxy Endpoint</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            color: #333;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        textarea {
+            height: 100px;
+            font-family: monospace;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        pre {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Test Supabase Proxy Endpoint</h1>
+
+    <div class="form-group">
+        <label for="endpoint">Endpoint URL:</label>
+        <input type="text" id="endpoint" value="/api/supabase/proxy">
+    </div>
+
+    <div class="form-group">
+        <label for="path">Supabase Path:</label>
+        <input type="text" id="path" value="/auth/v1/token?grant_type=password">
+    </div>
+
+    <div class="form-group">
+        <label for="method">HTTP Method:</label>
+        <select id="method">
+            <option value="GET">GET</option>
+            <option value="POST" selected>POST</option>
+            <option value="PUT">PUT</option>
+            <option value="DELETE">DELETE</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="body">Request Body (JSON):</label>
+        <textarea id="body">{
+  "email": "test@example.com",
+  "password": "password123"
+}</textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="token">Auth Token (optional):</label>
+        <input type="text" id="token" placeholder="JWT token">
+    </div>
+
+    <div class="form-group">
+        <label for="useServiceKey">Use Service Key:</label>
+        <select id="useServiceKey">
+            <option value="false" selected>No (use anon key)</option>
+            <option value="true">Yes (use service key)</option>
+        </select>
+    </div>
+
+    <button id="sendRequest">Send Request</button>
+
+    <h2>Response:</h2>
+    <div id="status"></div>
+    <pre id="response"></pre>
+
+    <script>
+        document.getElementById('sendRequest').addEventListener('click', async() => {
+            const endpoint = document.getElementById('endpoint').value;
+            const path = document.getElementById('path').value;
+            const method = document.getElementById('method').value;
+            const bodyText = document.getElementById('body').value;
+            const token = document.getElementById('token').value;
+            const useServiceKey = document.getElementById('useServiceKey').value === 'true';
+
+            const statusElement = document.getElementById('status');
+            const responseElement = document.getElementById('response');
+
+            try {
+                // Parse the body as JSON
+                let body;
+                try {
+                    body = bodyText ? JSON.parse(bodyText) : null;
+                } catch (e) {
+                    throw new Error(`Invalid JSON in request body: ${e.message}`);
+                }
+
+                // Prepare the request payload
+                const payload = {
+                    path,
+                    method,
+                    body,
+                    useServiceKey,
+                    token: token || null
+                };
+
+                statusElement.textContent = 'Sending request...';
+                statusElement.className = '';
+
+                // Send the request
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                // Get the response data
+                const data = await response.json();
+
+                // Display the response
+                statusElement.textContent = `Status: ${response.status} ${response.statusText}`;
+                statusElement.className = response.ok ? 'success' : 'error';
+
+                responseElement.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                statusElement.textContent = `Error: ${error.message}`;
+                statusElement.className = 'error';
+                responseElement.textContent = '';
+            }
+        });
+    </script>
+</body>
+
+</html>

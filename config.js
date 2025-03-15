@@ -18,7 +18,7 @@ export const API_ENDPOINTS = {
 
     // Supabase Data
     USER_SETTINGS: `${VERCEL_BACKEND_URL}/api/supabase/user-settings`,
-    BETA_ACCESS: `${VERCEL_BACKEND_URL}/api/supabasdue/beta-access`,
+    BETA_ACCESS: `${VERCEL_BACKEND_URL}/api/supabase/beta-access`,
 
     // API Usage
     USAGE: `${VERCEL_BACKEND_URL}/api/usage`,
