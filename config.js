@@ -2,7 +2,7 @@
 
 // Vercel backend URL (change this to your deployed Vercel app URL)
 // After deploying to Vercel, replace this with your actual deployment URL
-export const VERCEL_BACKEND_URL = 'https://linkedin-extension-secure-elew.vercel.app';
+export const VERCEL_BACKEND_URL = 'https://beten-umutbsgns-projects.vercel.app';
 
 // API endpoints
 export const API_ENDPOINTS = {

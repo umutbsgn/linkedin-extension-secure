@@ -78,7 +78,7 @@ async function createWebhookEndpoint() {
         }
 
         // Get webhook URL
-        const webhookUrl = await prompt('Enter your webhook URL (e.g., https://your-vercel-app.vercel.app/api/subscriptions/webhook): ');
+        const webhookUrl = await prompt('beten-umutbsgns-projects.vercel.app): ');
         if (!webhookUrl.startsWith('https://')) {
             throw new Error('Invalid webhook URL. It should start with "https://".');
         }

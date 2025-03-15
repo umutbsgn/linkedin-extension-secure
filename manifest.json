@@ -11,7 +11,7 @@
     ],
     "host_permissions": [
         "https://*.linkedin.com/*",
-        "https://linkedin-extension-secure-elew.vercel.app/*",
+        "https://beten-umutbsgns-projects.vercel.app/*",
         "https://api.anthropic.com/*",
         "https://fslbhbywcxqmqhwdcgcl.supabase.co/*",
         "https://eu.i.posthog.com/*"
@@ -36,7 +36,7 @@
         }
     },
     "content_security_policy": {
-        "extension_pages": "script-src 'self' http://localhost:* http://127.0.0.1:*; object-src 'self'; connect-src 'self' https://linkedin-extension-secure-elew.vercel.app https://api.anthropic.com https://fslbhbywcxqmqhwdcgcl.supabase.co https://eu.i.posthog.com https://eu-assets.i.posthog.com http://localhost:* http://127.0.0.1:*"
+        "extension_pages": "script-src 'self' http://localhost:* http://127.0.0.1:*; object-src 'self'; connect-src 'self' https://beten-umutbsgns-projects.vercel.app https://api.anthropic.com https://fslbhbywcxqmqhwdcgcl.supabase.co https://eu.i.posthog.com https://eu-assets.i.posthog.com http://localhost:* http://127.0.0.1:*"
     },
     "web_accessible_resources": [{
         "resources": [
