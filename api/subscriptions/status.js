@@ -1,5 +1,6 @@
 // api/subscriptions/status.js
 // Endpoint to get the subscription status for a user
+// Updated to fix subscription type issue
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
@@ -12,6 +13,12 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // Add Cache-Control headers to prevent caching
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
 
     // Handle OPTIONS request for CORS preflight
     if (req.method === 'OPTIONS') {
@@ -72,74 +79,55 @@ export default async function handler(req, res) {
         userId = user.id; // Update userId with actual user ID
         console.log(`User ID: ${userId}`);
 
-        console.log('Getting subscription type');
-        // Get the subscription type
+        console.log(`Checking subscription for user ${userId}`);
         try {
-            const subscriptionType = await getUserSubscriptionType(supabase, userId);
-            console.log(`Subscription type for user ${userId}: ${subscriptionType}`);
+            // Use the centralized check_user_subscription function
+            const { data: subscriptionData, error: subscriptionError } = await supabase.rpc('check_user_subscription', {
+                user_id: userId
+            });
 
-            console.log('Getting active subscription details');
-            // Get the active subscription details
-            let subscriptionData = null;
-            let subscriptionError = null;
-
-            try {
-                console.log(`Querying user_subscriptions table for user ${userId}`);
-                const result = await supabase
-                    .from('user_subscriptions')
-                    .select('*')
-                    .eq('user_id', userId)
-                    .eq('status', 'active')
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .single();
-
-                console.log('Subscription query result:', JSON.stringify(result, null, 2));
-
-                subscriptionData = result.data;
-                subscriptionError = result.error;
-            } catch (error) {
-                console.error('Error querying subscription data:', error);
-                // Continue with subscriptionData as null
+            if (subscriptionError) {
+                console.error('Error checking subscription:', subscriptionError);
+                trackApiCallFailure('subscription_status', startTime, 'Error checking subscription', {}, user.email || userId);
+                return res.status(500).json({ error: 'Error checking subscription', details: subscriptionError });
             }
 
-            // Only treat as error if it's not a "no rows returned" error
-            if (subscriptionError && subscriptionError.code !== 'PGRST116') {
-                console.log('Subscription error (not PGRST116):', subscriptionError);
-                trackApiCallFailure('subscription_status', startTime, 'Error getting subscription details', {}, user.email || userId);
-                return res.status(500).json({ error: 'Error getting subscription details', details: subscriptionError });
-            }
+            console.log('Subscription data from check_user_subscription:', JSON.stringify(subscriptionData, null, 2));
+            console.log('subscription_type:', subscriptionData.subscription_type);
+            console.log('is_active:', subscriptionData.is_active);
+            console.log('subscription_id:', subscriptionData.subscription_id);
+            console.log('current_period_end:', subscriptionData.current_period_end);
 
-            if (subscriptionError && subscriptionError.code === 'PGRST116') {
-                console.log('No subscription found for user (PGRST116)');
-            }
+            // Force subscription_type to match what's in the database
+            const subscriptionType = subscriptionData.subscription_type;
+            console.log('Using subscription_type from database:', subscriptionType);
 
             // Check if user has own API key configured
-            const useOwnApiKey = subscriptionData && subscriptionData.use_own_api_key && subscriptionData.own_api_key;
+            const useOwnApiKey = subscriptionData.use_own_api_key && subscriptionData.own_api_key;
             console.log(`User ${userId} should use own API key: ${!!useOwnApiKey}`);
 
             // Track successful API call
             trackApiCallSuccess('subscription_status', startTime, {
-                subscription_type: subscriptionType,
-                has_active_subscription: !!subscriptionData,
+                subscription_type: subscriptionData.subscription_type,
+                has_active_subscription: subscriptionData.is_active,
                 use_own_api_key: !!useOwnApiKey
             }, userId);
 
             console.log('Returning subscription status');
             // Return the subscription status
             const response = {
-                subscriptionType,
-                hasActiveSubscription: !!subscriptionData,
+                subscriptionType: subscriptionType, // Use the forced value
+                hasActiveSubscription: subscriptionData.is_active,
                 useOwnApiKey: !!useOwnApiKey,
-                subscription: subscriptionData ? {
-                    id: subscriptionData.stripe_subscription_id,
-                    status: subscriptionData.status,
-                    currentPeriodStart: subscriptionData.current_period_start,
+                subscription: subscriptionData.is_active ? {
+                    id: subscriptionData.subscription_id,
+                    status: 'active',
+                    currentPeriodStart: null, // Could be added to check_user_subscription if needed
                     currentPeriodEnd: subscriptionData.current_period_end
                 } : null
             };
 
-            console.log('Response:', JSON.stringify(response, null, 2));
+            console.log('Final response being sent to client:', JSON.stringify(response, null, 2));
             return res.status(200).json(response);
         } catch (subscriptionError) {
             console.error('Error in getUserSubscriptionType:', subscriptionError);

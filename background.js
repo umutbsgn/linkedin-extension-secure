@@ -235,7 +235,19 @@ async function trackEvent(eventName, properties = {}) {
 async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
     const startTime = Date.now();
 
-    console.log(`Calling Anthropic API with model: ${model}`);
+    // Ensure we're using the short model name format
+    let shortModelName = model;
+    if (model.startsWith('claude-3-')) {
+        // Convert full model name to short name
+        if (model.includes('haiku')) {
+            shortModelName = 'haiku-3.5';
+        } else if (model.includes('sonnet')) {
+            shortModelName = 'sonnet-3.7';
+        }
+        console.log(`Converted full model name ${model} to short name ${shortModelName}`);
+    }
+
+    console.log(`Calling Anthropic API with model: ${shortModelName}`);
     console.log(`Prompt length: ${prompt.length}, System prompt length: ${systemPrompt ? systemPrompt.length : 0}`);
 
     // Track API call
@@ -243,7 +255,7 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
         endpoint: 'anthropic_messages',
         prompt_length: prompt.length,
         system_prompt_length: systemPrompt ? systemPrompt.length : 0,
-        model: model
+        model: shortModelName
     });
 
     try {
@@ -270,7 +282,7 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
             body: JSON.stringify({
                 text: prompt,
                 systemPrompt: systemPrompt || "",
-                model: model
+                model: shortModelName
             })
         });
 
@@ -301,7 +313,7 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
                 error: errorMessage,
                 status_code: response.status,
                 response_time_ms: responseTime,
-                model: model
+                model: shortModelName
             });
 
             throw new Error(`API call failed: ${response.status} - ${errorMessage}`);
@@ -323,7 +335,7 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
             response_time_ms: responseTime,
             response_size_bytes: responseSize,
             content_length: data.content && data.content[0] && data.content[0].text && data.content[0].text.length || 0,
-            model: model
+            model: shortModelName
         });
 
         return data;
@@ -336,7 +348,7 @@ async function callAnthropicAPI(prompt, systemPrompt, model = DEFAULT_MODEL) {
                 endpoint: 'anthropic_messages',
                 error: error.message,
                 response_time_ms: Date.now() - startTime,
-                model: model
+                model: shortModelName
             });
         }
 

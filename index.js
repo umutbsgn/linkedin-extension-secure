@@ -1259,12 +1259,12 @@ app.post('/api/anthropic/analyze', async(req, res) => {
 
         // Model mapping for Anthropic API
         const MODEL_MAPPING = {
-            'haiku-3.5': 'claude-3-haiku-20240307',
-            'sonnet-3.7': 'claude-3-5-sonnet-20241022'
+            'haiku-3-5': 'claude-3-haiku-20240307',
+            'sonnet-3-7': 'claude-3-5-sonnet-20241022'
         };
 
         // Default model if none is specified
-        const DEFAULT_MODEL = 'haiku-3.5';
+        const DEFAULT_MODEL = 'claude-3-haiku-20240307';
 
         // Extract data from request
         const { text, systemPrompt, model = DEFAULT_MODEL } = req.body;

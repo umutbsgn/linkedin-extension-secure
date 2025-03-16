@@ -136,7 +136,8 @@ export function createSubscriptionManager(container, supabase, showStatus, loadA
             let featuresHtml = '';
             let actionsHtml = '';
 
-            if (subscriptionType === SUBSCRIPTION_TYPES.PRO) {
+            // Nur wenn hasActiveSubscription true ist und subscriptionType 'pro' ist, zeigen wir Pro-Features an
+            if (hasActiveSubscription && subscriptionType === SUBSCRIPTION_TYPES.PRO) {
                 statusText = 'Pro';
                 statusClass = 'pro';
 
@@ -153,19 +154,17 @@ export function createSubscriptionManager(container, supabase, showStatus, loadA
                 `;
 
                 // Add actions for Pro subscription
-                if (hasActiveSubscription) {
-                    // Show subscription details and cancel button
-                    const endDate = subscription ? new Date(subscription.currentPeriodEnd).toLocaleDateString() : 'Unknown';
+                // Show subscription details and cancel button
+                const endDate = subscription ? new Date(subscription.currentPeriodEnd).toLocaleDateString() : 'Unknown';
 
-                    actionsHtml = `
-                        <div class="subscription-actions">
-                            <div class="subscription-details">
-                                <p>Your subscription will ${subscription && subscription.cancelAtPeriodEnd ? 'end' : 'renew'} on ${endDate}.</p>
-                            </div>
-                            <button id="cancelSubscriptionBtn" class="danger-button">Cancel Subscription</button>
+                actionsHtml = `
+                    <div class="subscription-actions">
+                        <div class="subscription-details">
+                            <p>Your subscription will ${subscription && subscription.cancelAtPeriodEnd ? 'end' : 'renew'} on ${endDate}.</p>
                         </div>
-                    `;
-                }
+                        <button id="cancelSubscriptionBtn" class="danger-button">Cancel Subscription</button>
+                    </div>
+                `;
 
                 // Add API key settings for Pro users
                 const apiKeySettingsHtml = `

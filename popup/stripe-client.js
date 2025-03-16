@@ -123,9 +123,13 @@ export async function redirectToCheckout(token) {
  */
 export async function getSubscriptionStatus(token) {
     try {
+        console.log('Fetching subscription status...');
         const response = await fetch(API_ENDPOINTS.SUBSCRIPTION_STATUS, {
             headers: {
-                'Authorization': `Bearer ${token}`
+                'Authorization': `Bearer ${token}`,
+                // Add cache-busting query parameter to prevent caching
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
             }
         });
 
@@ -141,16 +145,24 @@ export async function getSubscriptionStatus(token) {
             throw new Error(errorData.error || `Failed to get subscription status: ${response.status} ${response.statusText}`);
         }
 
-        return await response.json();
+        const data = await response.json();
+        console.log('Subscription status received:', data);
+        return data;
     } catch (error) {
         console.error('Error getting subscription status:', error);
+        // Log the error to help with debugging
+        console.error('Stack trace:', error.stack);
+
         // Return a default subscription status for trial users
-        return {
+        const defaultStatus = {
             subscriptionType: 'trial',
             hasActiveSubscription: false,
             useOwnApiKey: false,
             subscription: null
         };
+
+        console.log('Returning default subscription status due to error:', defaultStatus);
+        return defaultStatus;
     }
 }
 

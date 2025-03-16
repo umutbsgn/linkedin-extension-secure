@@ -42,8 +42,8 @@ export async function getUserSubscriptionType(supabase, userId) {
     console.log(`Fetching subscription type for user ${userId} from database...`);
 
     try {
-        // Try to get the subscription type from the database function
-        const { data, error } = await supabase.rpc('get_user_subscription_type', { user_id: userId });
+        // Use the centralized check_user_subscription function instead of get_user_subscription_type
+        const { data, error } = await supabase.rpc('check_user_subscription', { user_id: userId });
 
         if (error) {
             console.error('Error getting user subscription type:', error);
@@ -51,7 +51,8 @@ export async function getUserSubscriptionType(supabase, userId) {
             return 'trial'; // Default fallback
         }
 
-        const subscriptionType = data || 'trial';
+        // Extract subscription_type from the check_user_subscription result
+        const subscriptionType = data && data.subscription_type ? data.subscription_type : 'trial';
         console.log(`Got subscription type for user ${userId} from database: ${subscriptionType}`);
 
         // Update cache
@@ -198,13 +199,16 @@ export async function shouldUseOwnApiKey(supabase, userId) {
  */
 export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_MODEL) {
     const currentDate = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
+    console.log(`checkAndUpdateApiUsage called for user ${userId} and model ${model}`);
 
     try {
         // Check if user should use their own API key
         const { useOwnKey, apiKey } = await shouldUseOwnApiKey(supabase, userId);
+        console.log(`User ${userId} should use own API key: ${useOwnKey}`);
 
         // If user should use their own API key, skip usage tracking
         if (useOwnKey && apiKey) {
+            console.log(`User ${userId} is using their own API key, skipping usage tracking`);
             return {
                 data: {
                     callsCount: 0,
@@ -219,8 +223,10 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
 
         // Get the model limit for this user
         const limit = await getModelLimit(supabase, userId, model);
+        console.log(`Model limit for user ${userId} and model ${model}: ${limit}`);
 
         // Check if an entry exists for the current date and model
+        console.log(`Checking if entry exists for user ${userId}, date ${currentDate}, and model ${model}`);
         let { data, error } = await supabase
             .from('api_models_usage')
             .select('*')
@@ -229,6 +235,14 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
             .eq('model', model)
             .single();
 
+        console.log(`Entry exists: ${!!data}, Error: ${!!error}, Error code: ${error ? error.code : 'none'}`);
+        if (error) {
+            console.log(`Error details: ${JSON.stringify(error)}`);
+        }
+        if (data) {
+            console.log(`Existing entry: ${JSON.stringify(data)}`);
+        }
+
         if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
             console.error('Error checking API usage:', error);
             return { error };
@@ -236,21 +250,31 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
 
         // If no entry exists, create a new one
         if (!data) {
+            console.log(`Creating new entry for user ${userId}, date ${currentDate}, and model ${model}`);
+            const insertData = {
+                user_id: userId,
+                date: currentDate,
+                model: model,
+                calls_count: 1,
+                last_reset: new Date().toISOString()
+            };
+            console.log(`Insert data: ${JSON.stringify(insertData)}`);
+
             const { data: newData, error: insertError } = await supabase
                 .from('api_models_usage')
-                .insert([{
-                    user_id: userId,
-                    date: currentDate,
-                    model: model,
-                    calls_count: 1,
-                    last_reset: new Date().toISOString()
-                }])
+                .insert([insertData])
                 .select()
                 .single();
 
+            console.log(`New entry created: ${!!newData}, Error: ${!!insertError}`);
             if (insertError) {
                 console.error('Error creating API usage entry:', insertError);
+                console.log(`Insert error details: ${JSON.stringify(insertError)}`);
                 return { error: insertError };
+            }
+
+            if (newData) {
+                console.log(`New entry data: ${JSON.stringify(newData)}`);
             }
 
             return {
@@ -268,19 +292,25 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
         // Entry exists, increment counter
         const newCount = data.calls_count + 1;
         const hasRemainingCalls = limit === 0 ? false : newCount <= limit;
+        console.log(`Updating entry for user ${userId}, date ${currentDate}, and model ${model}: ${data.calls_count} -> ${newCount}`);
 
         // Only update if the limit hasn't been exceeded
         if (hasRemainingCalls) {
+            const updateData = {
+                calls_count: newCount,
+                updated_at: new Date().toISOString()
+            };
+            console.log(`Update data: ${JSON.stringify(updateData)}`);
+
             const { error: updateError } = await supabase
                 .from('api_models_usage')
-                .update({
-                    calls_count: newCount,
-                    updated_at: new Date().toISOString()
-                })
+                .update(updateData)
                 .eq('id', data.id);
 
+            console.log(`Entry updated: ${!updateError}, Error: ${!!updateError}`);
             if (updateError) {
                 console.error('Error updating API usage:', updateError);
+                console.log(`Update error details: ${JSON.stringify(updateError)}`);
                 return { error: updateError };
             }
         }
@@ -297,6 +327,7 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
         };
     } catch (error) {
         console.error('Unexpected error in checkAndUpdateApiUsage:', error);
+        console.log(`Unexpected error details: ${JSON.stringify(error)}`);
         return { error };
     }
 }
