@@ -7,8 +7,8 @@ import { checkAndUpdateApiUsage, shouldUseOwnApiKey } from '../utils/usage.js';
 
 // Model mapping for Anthropic API
 const MODEL_MAPPING = {
-    'haiku-3.5': 'claude-3-haiku-20240307',
-    'sonnet-3.7': 'claude-3-5-sonnet-20241022'
+    'haiku-3.5': 'claude-3-5-haiku-20241022', // Updated to Claude 3.5 Haiku (cheaper for trial users)
+    'sonnet-3.7': 'claude-3-7-sonnet-20250219' // Updated to Claude 3.7 Sonnet (premium for pro users)
 };
 
 // Default model if none is specified

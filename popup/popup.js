@@ -427,7 +427,7 @@ document.addEventListener('DOMContentLoaded', async() => {
     }
 
     // Function to initialize the model selector
-    function initializeModelSelector() {
+    async function initializeModelSelector() {
         const modelSelect = document.getElementById('modelSelect');
         if (!modelSelect) return;
 
@@ -457,6 +457,29 @@ document.addEventListener('DOMContentLoaded', async() => {
                 modelSelect.value = result.selectedModel;
             }
         });
+
+        // Check subscription type to enable/disable advanced models for trial users
+        try {
+            // Get initial API usage data which includes subscription type
+            const usageData = await loadApiUsage();
+
+            if (usageData && usageData.subscriptionType === 'trial') {
+                // For trial users, disable the Sonnet option
+                const sonnetOption = modelSelect.querySelector('option[value="sonnet-3.7"]');
+                if (sonnetOption) {
+                    sonnetOption.disabled = true;
+                    sonnetOption.text = sonnetOption.text + ' (Pro only)';
+                }
+
+                // Make sure trial users can't select the disabled option
+                if (modelSelect.value === 'sonnet-3.7') {
+                    modelSelect.value = DEFAULT_MODEL;
+                    await chrome.storage.local.set({ selectedModel: DEFAULT_MODEL });
+                }
+            }
+        } catch (error) {
+            console.error('Error checking subscription for model selector:', error);
+        }
     }
 
     async function loadUserSettings() {
