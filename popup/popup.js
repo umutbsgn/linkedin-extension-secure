@@ -426,15 +426,130 @@ document.addEventListener('DOMContentLoaded', async() => {
         initAnalytics(); // Initialize PostHog
     }
 
+    // Function to load available models from the server
+    async function loadAvailableModels() {
+        try {
+            console.log('Loading available models...');
+            const result = await chrome.storage.local.get(['supabaseAuthToken']);
+            const session = await supabase.auth.getSession();
+
+            const token = result.supabaseAuthToken || session.access_token;
+
+            if (!token) {
+                console.error('No auth token available');
+                return null;
+            }
+
+            console.log(`Fetching available models with token: ${token.substring(0, 10)}...`);
+            const response = await fetch(API_ENDPOINTS.MODELS, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            console.log('Available models response status:', response.status);
+
+            if (!response.ok) {
+                console.error('Failed to fetch available models:', response.status, response.statusText);
+
+                // Log response body for debugging
+                try {
+                    const errorText = await response.text();
+                    console.error('Error response body:', errorText);
+                } catch (e) {
+                    console.error('Could not read error response body:', e);
+                }
+
+                return null;
+            }
+
+            const modelsData = await response.json();
+            console.log('Available models data received:', modelsData);
+            return modelsData;
+        } catch (error) {
+            console.error('Error loading available models:', error);
+            return null;
+        }
+    }
+
     // Function to initialize the model selector
     async function initializeModelSelector() {
         const modelSelect = document.getElementById('modelSelect');
         if (!modelSelect) return;
 
-        // Set the default model
-        modelSelect.value = DEFAULT_MODEL;
+        // Load available models from the server
+        const modelsData = await loadAvailableModels();
 
-        // Add event listener to save the selected model and update API usage display
+        if (!modelsData || !modelsData.models || modelsData.models.length === 0) {
+            console.error('No models available or error loading models');
+
+            // Set default model as fallback
+            modelSelect.value = DEFAULT_MODEL;
+
+            // Add event listener for model changes
+            modelSelect.addEventListener('change', async() => {
+                const selectedModel = modelSelect.value;
+
+                // Track model selection
+                trackEvent('Model_Selection', {
+                    model: selectedModel
+                });
+
+                // Save the selected model to local storage
+                await chrome.storage.local.set({ selectedModel });
+
+                // Refresh API usage display for the selected model
+                const usageData = await loadApiUsage(selectedModel);
+                updateApiUsageUI(usageData);
+            });
+
+            return;
+        }
+
+        // Clear existing options
+        modelSelect.innerHTML = '';
+
+        // Add options based on available models
+        modelsData.models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.model_id;
+            option.text = model.display_name;
+            option.disabled = !model.available;
+            if (!model.available) {
+                option.text += ' (Pro only)';
+            }
+            modelSelect.appendChild(option);
+        });
+
+        // Select default model
+        const defaultModel = modelsData.models.find(model => model.is_default);
+        if (defaultModel) {
+            modelSelect.value = defaultModel.model_id;
+        } else if (modelsData.models.length > 0) {
+            modelSelect.value = modelsData.models[0].model_id;
+        }
+
+        // Load previously selected model from local storage
+        chrome.storage.local.get('selectedModel', async(result) => {
+            if (result.selectedModel) {
+                // Check if the previously selected model is available
+                const isAvailable = Array.from(modelSelect.options).some(option =>
+                    option.value === result.selectedModel && !option.disabled
+                );
+
+                if (isAvailable) {
+                    modelSelect.value = result.selectedModel;
+                } else {
+                    // If not available, save the current selection
+                    await chrome.storage.local.set({ selectedModel: modelSelect.value });
+                }
+            } else {
+                // Save the current selection if no previous selection
+                await chrome.storage.local.set({ selectedModel: modelSelect.value });
+            }
+        });
+
+        // Add event listener for model changes
         modelSelect.addEventListener('change', async() => {
             const selectedModel = modelSelect.value;
 
@@ -450,36 +565,6 @@ document.addEventListener('DOMContentLoaded', async() => {
             const usageData = await loadApiUsage(selectedModel);
             updateApiUsageUI(usageData);
         });
-
-        // Load the selected model from local storage
-        chrome.storage.local.get('selectedModel', (result) => {
-            if (result.selectedModel) {
-                modelSelect.value = result.selectedModel;
-            }
-        });
-
-        // Check subscription type to enable/disable advanced models for trial users
-        try {
-            // Get initial API usage data which includes subscription type
-            const usageData = await loadApiUsage();
-
-            if (usageData && usageData.subscriptionType === 'trial') {
-                // For trial users, disable the Sonnet option
-                const sonnetOption = modelSelect.querySelector('option[value="sonnet-3.7"]');
-                if (sonnetOption) {
-                    sonnetOption.disabled = true;
-                    sonnetOption.text = sonnetOption.text + ' (Pro only)';
-                }
-
-                // Make sure trial users can't select the disabled option
-                if (modelSelect.value === 'sonnet-3.7') {
-                    modelSelect.value = DEFAULT_MODEL;
-                    await chrome.storage.local.set({ selectedModel: DEFAULT_MODEL });
-                }
-            }
-        } catch (error) {
-            console.error('Error checking subscription for model selector:', error);
-        }
     }
 
     async function loadUserSettings() {

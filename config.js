@@ -12,6 +12,9 @@ export const API_ENDPOINTS = {
     // Anthropic
     ANALYZE: `${VERCEL_BACKEND_URL}/api/anthropic/analyze`,
 
+    // Models
+    MODELS: `${VERCEL_BACKEND_URL}/api/models`,
+
     // Supabase Auth
     LOGIN: `${VERCEL_BACKEND_URL}/api/supabase/auth/login`,
     SIGNUP: `${VERCEL_BACKEND_URL}/api/supabase/auth/signup`,
