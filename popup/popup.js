@@ -192,21 +192,23 @@ document.addEventListener('DOMContentLoaded', async() => {
     // Functions
 
     // Function to load API usage data
-    async function loadApiUsage() {
+    async function loadApiUsage(model) {
         try {
             console.log('Loading API usage data...');
-            const result = await chrome.storage.local.get(['supabaseAuthToken']);
+            const result = await chrome.storage.local.get(['supabaseAuthToken', 'selectedModel']);
             const session = await supabase.auth.getSession();
 
             const token = result.supabaseAuthToken || session.access_token;
+            // Use the provided model, or the selected model from storage, or the default model
+            const modelToUse = model || result.selectedModel || DEFAULT_MODEL;
 
             if (!token) {
                 console.error('No auth token available');
                 return null;
             }
 
-            console.log('Fetching API usage with token:', token.substring(0, 10) + '...');
-            const response = await fetch(API_ENDPOINTS.USAGE, {
+            console.log(`Fetching API usage with token: ${token.substring(0, 10)}... for model: ${modelToUse}`);
+            const response = await fetch(`${API_ENDPOINTS.USAGE}?model=${modelToUse}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -253,16 +255,88 @@ document.addEventListener('DOMContentLoaded', async() => {
             return;
         }
 
+        // Check if this is the new format with models data (for Pro users)
+        if (usageData.models && usageData.subscriptionType) {
+            // Pro user with multiple models
+            const { models, subscriptionType, useOwnKey, nextResetDate } = usageData;
+
+            // If user is using their own API key, show unlimited
+            if (useOwnKey) {
+                apiUsageElement.innerHTML = `
+                    <div class="api-usage-container">
+                        <div class="api-usage-header">
+                            <h3>API Usage</h3>
+                            <span class="api-usage-model">Subscription: Pro (Premium)</span>
+                        </div>
+                        <div class="api-usage-unlimited">
+                            <div class="unlimited-badge">UNLIMITED</div>
+                            <p>You have unlimited access to all features</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Format the next reset date
+            const nextResetDateFormatted = new Date(nextResetDate).toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+
+            // Create HTML for each model
+            let modelsHtml = '';
+            for (const modelName in models) {
+                const modelData = models[modelName];
+                const { callsCount, limit, hasRemainingCalls } = modelData;
+
+                const usagePercentage = limit > 0 ? Math.min(100, Math.round((callsCount / limit) * 100)) : 100;
+                const progressBarClass = hasRemainingCalls ?
+                    (usagePercentage < 80 ? 'progress-good' : 'progress-warning') :
+                    'progress-danger';
+
+                modelsHtml += `
+                    <div class="api-usage-model-container">
+                        <div class="api-usage-model-header">
+                            <span class="api-usage-model">Model: ${modelName}</span>
+                        </div>
+                        <div class="api-usage-stats">
+                            <div class="api-usage-progress-container">
+                                <div class="api-usage-progress-bar ${progressBarClass}" style="width: ${usagePercentage}%"></div>
+                            </div>
+                            <div class="api-usage-counts">
+                                <span>${callsCount} / ${limit === 0 ? '∞' : limit}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            apiUsageElement.innerHTML = `
+                <div class="api-usage-container">
+                    <div class="api-usage-header">
+                        <h3>API Usage</h3>
+                        <span class="api-usage-subscription">Subscription: ${subscriptionType}</span>
+                    </div>
+                    ${modelsHtml}
+                    <div class="api-usage-reset">
+                        <small>Resets on: ${nextResetDateFormatted}</small>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        // Old format for single model (for Trial users)
         const { callsCount, limit, hasRemainingCalls, nextResetDate, useOwnKey } = usageData;
 
-        // Check if user is a pro user or using their own API key
-        // Only show unlimited if explicitly marked as useOwnKey
+        // Check if user is using their own API key
         if (useOwnKey) {
             apiUsageElement.innerHTML = `
                 <div class="api-usage-container">
                     <div class="api-usage-header">
                         <h3>API Usage</h3>
-                        <span class="api-usage-model">Model: Sonnet-3.7 (Premium)</span>
+                        <span class="api-usage-model">Model: ${usageData.model || 'haiku-3.5'} (Premium)</span>
                     </div>
                     <div class="api-usage-unlimited">
                         <div class="unlimited-badge">UNLIMITED</div>
@@ -360,7 +434,7 @@ document.addEventListener('DOMContentLoaded', async() => {
         // Set the default model
         modelSelect.value = DEFAULT_MODEL;
 
-        // Add event listener to save the selected model
+        // Add event listener to save the selected model and update API usage display
         modelSelect.addEventListener('change', async() => {
             const selectedModel = modelSelect.value;
 
@@ -371,6 +445,10 @@ document.addEventListener('DOMContentLoaded', async() => {
 
             // Save the selected model to local storage
             await chrome.storage.local.set({ selectedModel });
+
+            // Refresh API usage display for the selected model
+            const usageData = await loadApiUsage(selectedModel);
+            updateApiUsageUI(usageData);
         });
 
         // Load the selected model from local storage

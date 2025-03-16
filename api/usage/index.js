@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
-import { getCurrentApiUsage } from '../utils/usage.js';
+import { getCurrentApiUsage, getUserSubscriptionType, getAllApiUsage } from '../utils/usage.js';
 
 export default async function handler(req, res) {
     console.log('API usage endpoint called');
@@ -75,23 +75,55 @@ export default async function handler(req, res) {
         console.log('Getting current API usage for user');
         // Get the current API usage for the user
         try {
-            const usageResponse = await getCurrentApiUsage(supabase, userId);
-            console.log('Usage response received:', JSON.stringify(usageResponse, null, 2));
+            // Check if a model parameter was provided in the query string
+            const model = req.query.model || 'haiku-3.5';
+            console.log(`Requested model: ${model}`);
 
-            const { data: usageData, error: usageError } = usageResponse;
+            // Get the user's subscription type
+            const subscriptionType = await getUserSubscriptionType(supabase, userId);
+            console.log(`User subscription type: ${subscriptionType}`);
 
-            if (usageError) {
-                console.log('Usage error:', usageError);
-                trackApiCallFailure('api_usage', startTime, 'Error retrieving API usage', {}, userId);
-                return res.status(500).json({ error: 'Error retrieving API usage', details: usageError });
+            // If the user has a pro subscription, get usage for all models
+            if (subscriptionType === 'pro') {
+                console.log('Pro user detected, getting usage for all models');
+                const allUsageResponse = await getAllApiUsage(supabase, userId);
+                console.log('All usage response received:', JSON.stringify(allUsageResponse, null, 2));
+
+                const { data: allUsageData, error: allUsageError } = allUsageResponse;
+
+                if (allUsageError) {
+                    console.log('All usage error:', allUsageError);
+                    trackApiCallFailure('api_usage', startTime, 'Error retrieving API usage', {}, userId);
+                    return res.status(500).json({ error: 'Error retrieving API usage', details: allUsageError });
+                }
+
+                // Track successful API call
+                trackApiCallSuccess('api_usage', startTime, {}, userId);
+
+                console.log('Returning all API usage data');
+                // Return the API usage data
+                return res.status(200).json(allUsageData);
+            } else {
+                // For trial users, just get usage for the requested model
+                console.log(`Trial user, getting usage for model: ${model}`);
+                const usageResponse = await getCurrentApiUsage(supabase, userId, model);
+                console.log('Usage response received:', JSON.stringify(usageResponse, null, 2));
+
+                const { data: usageData, error: usageError } = usageResponse;
+
+                if (usageError) {
+                    console.log('Usage error:', usageError);
+                    trackApiCallFailure('api_usage', startTime, 'Error retrieving API usage', {}, userId);
+                    return res.status(500).json({ error: 'Error retrieving API usage', details: usageError });
+                }
+
+                // Track successful API call
+                trackApiCallSuccess('api_usage', startTime, {}, userId);
+
+                console.log('Returning API usage data for model:', model);
+                // Return the API usage data
+                return res.status(200).json(usageData);
             }
-
-            // Track successful API call
-            trackApiCallSuccess('api_usage', startTime, {}, userId);
-
-            console.log('Returning API usage data');
-            // Return the API usage data
-            return res.status(200).json(usageData);
         } catch (usageError) {
             console.error('Error in getCurrentApiUsage:', usageError);
             trackApiCallFailure('api_usage', startTime, `Error in getCurrentApiUsage: ${usageError.message}`, {}, userId);
