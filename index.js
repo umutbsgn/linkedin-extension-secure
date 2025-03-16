@@ -234,7 +234,7 @@ const trackApiCallFailure = (eventName, startTime, errorMessage, properties = {}
 
 // Helper functions for API usage tracking
 const getCurrentApiUsage = async(supabase, userId) => {
-    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    const currentDate = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
 
     try {
         // Get the API usage limit (hardcoded for now)
@@ -245,7 +245,7 @@ const getCurrentApiUsage = async(supabase, userId) => {
             .from('api_usage')
             .select('*')
             .eq('user_id', userId)
-            .eq('month', currentMonth)
+            .eq('date', currentDate)
             .single();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
@@ -282,18 +282,18 @@ const getCurrentApiUsage = async(supabase, userId) => {
 
 // Function to check and update API usage
 const checkAndUpdateApiUsage = async(supabase, userId) => {
-    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    const currentDate = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
 
     try {
         // Get the API usage limit (hardcoded for now)
         const limit = 50;
 
-        // Check if an entry exists for the current month
+        // Check if an entry exists for the current date
         let { data, error } = await supabase
             .from('api_usage')
             .select('*')
             .eq('user_id', userId)
-            .eq('month', currentMonth)
+            .eq('date', currentDate)
             .single();
 
         if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
@@ -303,12 +303,12 @@ const checkAndUpdateApiUsage = async(supabase, userId) => {
 
         // If no entry exists, create a new one
         if (!data) {
-            console.log(`Creating new API usage entry for user ${userId} and month ${currentMonth}`);
+            console.log(`Creating new API usage entry for user ${userId} and date ${currentDate}`);
             const { data: newData, error: insertError } = await supabase
                 .from('api_usage')
                 .insert([{
                     user_id: userId,
-                    month: currentMonth,
+                    date: currentDate,
                     calls_count: 1,
                     last_reset: new Date().toISOString()
                 }])
