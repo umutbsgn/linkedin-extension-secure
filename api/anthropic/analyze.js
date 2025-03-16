@@ -3,7 +3,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { trackApiCallStart, trackApiCallSuccess, trackApiCallFailure } from '../utils/tracking.js';
-import { checkAndUpdateApiUsage, shouldUseOwnApiKey } from '../utils/usage.js';
+import { checkAndUpdateApiUsage, shouldUseOwnApiKey, getUserSubscriptionType } from '../utils/usage.js';
 
 // Model mapping for Anthropic API
 const MODEL_MAPPING = {
@@ -109,6 +109,26 @@ export default async function handler(req, res) {
 
         userId = user.id; // Update userId with actual user ID
         console.log(`User ID: ${userId}`);
+
+        // Check if trial user is trying to use sonnet-3.7 model
+        if (model === 'sonnet-3.7') {
+            console.log('Checking subscription type for sonnet-3.7 access');
+            const subscriptionType = await getUserSubscriptionType(supabase, userId);
+            console.log(`User subscription type: ${subscriptionType}`);
+
+            if (subscriptionType === 'trial') {
+                console.log('Trial user attempting to use sonnet-3.7 model - access denied');
+                trackApiCallFailure('anthropic_messages', startTime, 'Trial users cannot use sonnet-3.7 model', { model }, user.email || userId);
+                return res.status(403).json({
+                    error: 'Trial users cannot use the sonnet-3.7 model. Please upgrade to Pro.',
+                    subscriptionType: 'trial',
+                    model: model,
+                    subscriptionOptions: {
+                        upgrade: true
+                    }
+                });
+            }
+        }
 
         console.log('Checking if user should use their own API key');
         // Check if user should use their own API key
