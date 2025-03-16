@@ -122,8 +122,12 @@ export async function getModelLimit(supabase, userId, model = DEFAULT_MODEL) {
         // Get the model limits based on subscription type
         const limits = await getModelLimits(supabase, subscriptionType);
 
-        // Return the limit for the specified model
-        return limits[model] || 0;
+        // Return the limit for the specified model based on subscription type
+        if (subscriptionType === 'pro') {
+            return (limits && limits.pro_limits && limits.pro_limits[model]) || 0;
+        } else {
+            return (limits && limits.trial_limits && limits.trial_limits[model]) || 0;
+        }
     } catch (error) {
         console.error('Unexpected error in getModelLimit:', error);
         return model === 'haiku-3.5' ? 50 : 0; // Default fallback
@@ -193,7 +197,7 @@ export async function shouldUseOwnApiKey(supabase, userId) {
  * @returns {Promise<Object>} Result with usage data
  */
 export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_MODEL) {
-    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    const currentDate = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
 
     try {
         // Check if user should use their own API key
@@ -216,12 +220,12 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
         // Get the model limit for this user
         const limit = await getModelLimit(supabase, userId, model);
 
-        // Check if an entry exists for the current month and model
+        // Check if an entry exists for the current date and model
         let { data, error } = await supabase
             .from('api_models_usage')
             .select('*')
             .eq('user_id', userId)
-            .eq('month', currentMonth)
+            .eq('date', currentDate)
             .eq('model', model)
             .single();
 
@@ -236,7 +240,7 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
                 .from('api_models_usage')
                 .insert([{
                     user_id: userId,
-                    month: currentMonth,
+                    date: currentDate,
                     model: model,
                     calls_count: 1,
                     last_reset: new Date().toISOString()
@@ -305,7 +309,7 @@ export async function checkAndUpdateApiUsage(supabase, userId, model = DEFAULT_M
  * @returns {Promise<Object>} Result with usage data
  */
 export async function getCurrentApiUsage(supabase, userId, model = DEFAULT_MODEL) {
-    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    const currentDate = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
 
     try {
         console.log(`Getting API usage for user ${userId} and model ${model}`);
@@ -339,7 +343,7 @@ export async function getCurrentApiUsage(supabase, userId, model = DEFAULT_MODEL
             .from('api_models_usage')
             .select('*')
             .eq('user_id', userId)
-            .eq('month', currentMonth)
+            .eq('date', currentDate)
             .eq('model', model)
             .single();
 
@@ -393,7 +397,7 @@ export async function getCurrentApiUsage(supabase, userId, model = DEFAULT_MODEL
  * @returns {Promise<Object>} Result with usage data for all models
  */
 export async function getAllApiUsage(supabase, userId) {
-    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    const currentDate = new Date().toISOString().substring(0, 10); // YYYY-MM-DD
 
     try {
         // Get the user's subscription type
@@ -410,7 +414,7 @@ export async function getAllApiUsage(supabase, userId) {
             .from('api_models_usage')
             .select('*')
             .eq('user_id', userId)
-            .eq('month', currentMonth);
+            .eq('date', currentDate);
 
         if (error) {
             console.error('Error getting all API usage:', error);
