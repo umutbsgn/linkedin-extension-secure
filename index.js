@@ -180,7 +180,7 @@ app.get('/api/models', async(req, res) => {
 
         console.log('Getting available models for user');
         // Get available models for the user
-        const { data, error } = await supabase.rpc('get_available_models', { user_id: userId });
+        const { data, error } = await supabase.rpc('get_available_models', { input_user_id: userId });
 
         if (error) {
             console.log('Error getting available models:', error);
